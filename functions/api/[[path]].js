@@ -148,6 +148,56 @@ function yamlString(value) {
     return `"${String(value ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r?\n/g, '\\n')}"`;
 }
 
+// ============================================================
+//  多对多凭据模型
+// ============================================================
+//  已用本机 sing-box 1.12.12 实测验证（见 KUI多对多可行性验证报告.md）：
+//  sing-box 的 users 是数组，每个元素可携带独立凭据，与 inbound 级的
+//  tls / Reality(private_key, short_id) 参数完全正交。因此多人授权
+//  **不需要**为每个人生成独立 Reality 密钥，这是多对多能低成本落地的关键。
+//
+//  凭据字段按协议分为两类：
+//    uuid 型   —— VLESS / XTLS-Reality / H2-Reality / gRPC-Reality / VLESS-Argo
+//                 → 凭据写进 users[].uuid
+//    password 型 —— Trojan / AnyTLS / Hysteria2 / TUIC / Naive / Socks5
+//                 → 凭据写进 users[].password（TUIC 另需 users[].uuid）
+//
+//  多对多开放名单（实测通过）：VLESS 系 + Hysteria2 + TUIC + Trojan + AnyTLS
+//  不开放：Naive / Socks5（双字段且涉及转发语义，超出本次范围）
+const CREDENTIAL_UUID_PROTOCOLS = new Set(['VLESS', 'XTLS-Reality', 'Reality', 'H2-Reality', 'gRPC-Reality', 'VLESS-Argo']);
+const CREDENTIAL_PASSWORD_PROTOCOLS = new Set(['Hysteria2', 'TUIC', 'Trojan', 'AnyTLS']);
+const MULTI_CRED_PROTOCOLS = new Set([...CREDENTIAL_UUID_PROTOCOLS, ...CREDENTIAL_PASSWORD_PROTOCOLS]);
+
+// 是否支持多用户独立凭据（前端授权页据此只显示这几类节点）
+function supportsMultiCredential(protocol) {
+    return MULTI_CRED_PROTOCOLS.has(protocol);
+}
+
+// 按协议生成一个人的独立凭据。
+// UUID 型 → 标准 v4 UUID；password 型 → 22 字符 base64（与现有 Trojan/AnyTLS 风格一致）。
+function generateCredential(protocol) {
+    if (CREDENTIAL_UUID_PROTOCOLS.has(protocol)) return crypto.randomUUID();
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return btoa(String.fromCharCode(...bytes));
+}
+
+// 节点在某协议下渲染链接所需的凭据。
+// multi=false（单归属/降级）→ 沿用 nodes 表的主凭据，保持既有行为不变。
+// multi=true且该用户已授权 → 用 node_grants 里的专属凭据。
+function credentialFor(node, username, grantCredential) {
+    if (grantCredential) return grantCredential;
+    return node.uuid || '';
+}
+
+// password 型节点的凭据：Trojan/AnyTLS 原本复用 private_key（=证书私钥），
+// 这在单归属下可行，但多对多时必须改为每人的独立密码，否则无法区分也无法单独踢人。
+function passwordFor(node, username, grantCredential) {
+    if (grantCredential) return grantCredential;
+    return node.private_key || '';
+}
+
+
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 }
@@ -507,7 +557,16 @@ async function initializeDbSchema(db) {
         `CREATE TABLE IF NOT EXISTS user_group_members (group_id TEXT NOT NULL, username TEXT NOT NULL, PRIMARY KEY(group_id, username), FOREIGN KEY(group_id) REFERENCES user_groups(id) ON DELETE CASCADE, FOREIGN KEY(username) REFERENCES users(username) ON DELETE CASCADE)`,
         `CREATE TABLE IF NOT EXISTS user_group_resources (group_id TEXT NOT NULL, resource_type TEXT NOT NULL CHECK(resource_type IN ('vps', 'node')), resource_id TEXT NOT NULL, PRIMARY KEY(group_id, resource_type, resource_id), FOREIGN KEY(group_id) REFERENCES user_groups(id) ON DELETE CASCADE)`,
         `CREATE INDEX IF NOT EXISTS idx_group_members_user ON user_group_members(username)`,
-        `CREATE INDEX IF NOT EXISTS idx_group_resources_resource ON user_group_resources(resource_type, resource_id)`
+        `CREATE INDEX IF NOT EXISTS idx_group_resources_resource ON user_group_resources(resource_type, resource_id)`,
+        // 多对多凭据表：一个节点(inbound)可授权给多个用户，每人一条独立凭据。
+        // 关键设计：
+        //   1) node_id + username 为联合主键 → 同一用户对同一节点只有一条凭据
+        //   2) credential 是按人独立的值（VLESS 系用 uuid，Trojan/AnyTLS/Hysteria2 用 password），
+        //      不再复用 nodes.uuid / nodes.private_key，否则多人无法区分、也无法单独踢人
+        //   3) 节点自身仍保留 uuid 字段作为「主凭据」，供未授权用户与降级场景使用
+        `CREATE TABLE IF NOT EXISTS node_grants (node_id TEXT NOT NULL, username TEXT NOT NULL, credential TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY(node_id, username))`,
+        `CREATE INDEX IF NOT EXISTS idx_node_grants_user ON node_grants(username)`,
+        `CREATE INDEX IF NOT EXISTS idx_node_grants_node ON node_grants(node_id)`
     ];
     for (let query of initQueries) { try { await db.prepare(query).run(); } catch (e) {} }
     try { await db.prepare("ALTER TABLE nodes ADD COLUMN network TEXT DEFAULT 'tcp'").run(); } catch (e) {}
@@ -1300,6 +1359,35 @@ export async function onRequest(context) {
             }
         } catch (e) {}
         for (let node of machineNodes) { if (node.protocol === "dokodemo-door" && node.relay_type === "internal") { const targetNode = await db.prepare("SELECT * FROM nodes WHERE id = ?").bind(node.target_id).first(); if (targetNode) node.chain_target = { ip: targetNode.vps_ip, port: targetNode.port, protocol: targetNode.protocol, uuid: targetNode.uuid, password: targetNode.private_key, sni: targetNode.sni, public_key: targetNode.public_key, short_id: targetNode.short_id }; } }
+
+        // 多对多：把每条节点的全部授权凭据下发下去，agent 据此聚合 sing-box 的 users 数组。
+        // 下发的是「谁被授权、用什么凭据」，agent 不需要也不应该知道用户密码。
+        // 凭据表缺失（老库未迁移）时静默降级为只带 nodes.uuid，不影响单归属模式运行。
+        let grantList = [];
+        try {
+            const ids = machineNodes.map(n => n.id).filter(Boolean);
+            if (ids.length) {
+                for (let i = 0; i < ids.length; i += 80) {
+                    const slice = ids.slice(i, i + 80);
+                    const g = await db.prepare(`SELECT node_id, username, credential FROM node_grants WHERE node_id IN (${slice.map(() => '?').join(',')}) ORDER BY created_at ASC`).bind(...slice).all();
+                    for (const row of (g.results || [])) grantList.push({ node_id: row.node_id, username: row.username, credential: row.credential });
+                }
+            }
+        } catch (e) {}
+        // 仅下发仍在启用状态、且未过期的用户凭据。停用/过期用户必须在此被剔除，
+        // 否则「停用用户」这个动作不会真正把人踢下线。
+        if (grantList.length) {
+            const unames = [...new Set(grantList.map(g => g.username))].filter(Boolean);
+            if (unames.length) {
+                const active = new Set();
+                for (let i = 0; i < unames.length; i += 80) {
+                    const slice = unames.slice(i, i + 80);
+                    const u = await db.prepare(`SELECT username FROM users WHERE username IN (${slice.map(() => '?').join(',')}) AND enable = 1 AND (expire_time = 0 OR expire_time > ?)`).bind(...slice, Date.now()).all();
+                    for (const row of (u.results || [])) active.add(row.username);
+                }
+                grantList = grantList.filter(g => active.has(g.username));
+            }
+        }
         let proxyCfg = { global: {}, toggle: { enable: false } };
         try {
             const r = await db.prepare("SELECT value FROM probe_settings WHERE key='proxy_config'").first();
@@ -1322,7 +1410,7 @@ export async function onRequest(context) {
         } catch (ex) {}
         const serverAuth = await db.prepare("SELECT agent_token FROM servers WHERE ip = ?").bind(ip).first();
         const realtime = await db.prepare("SELECT val FROM sys_config WHERE key = 'realtime_url'").first();
-        return Response.json({ success: true, configs: machineNodes, blocked_ports: blockedPorts, agent_token: serverAuth && serverAuth.agent_token || '', proxy: proxyCfg, residential_outbound, egress, realtime_url: env.REALTIME_URL || realtime && realtime.val || '' });
+        return Response.json({ success: true, configs: machineNodes, node_grants: grantList, blocked_ports: blockedPorts, agent_token: serverAuth && serverAuth.agent_token || '', proxy: proxyCfg, residential_outbound, egress, realtime_url: env.REALTIME_URL || realtime && realtime.val || '' });
     }
 
         if (action === "egress_result" && method === "POST") {
@@ -1436,12 +1524,31 @@ export async function onRequest(context) {
         sqlParams = [now];
         if (ip) { query += " AND vps_ip = ?"; sqlParams.push(ip); }
         } else {
-            query = `SELECT DISTINCT n.* FROM nodes n JOIN users u ON u.username = ? WHERE n.enable = 1 AND (n.traffic_limit = 0 OR n.traffic_used < n.traffic_limit) AND (n.expire_time = 0 OR n.expire_time > ?) AND u.enable = 1 AND (u.traffic_limit = 0 OR u.traffic_used < u.traffic_limit) AND (u.expire_time = 0 OR u.expire_time > ?) AND (n.username = u.username OR EXISTS (SELECT 1 FROM user_group_members gm JOIN user_group_resources gr ON gr.group_id = gm.group_id WHERE gm.username = u.username AND ((gr.resource_type = 'node' AND gr.resource_id = n.id) OR (gr.resource_type = 'vps' AND gr.resource_id = n.vps_ip))))`;
+            // 多对多模型：以 node_grants 为准。一个节点不再属于某个人，而是被若干人授权。
+            // 保留原有 nodes.username 与用户组授权作为兼容回退（迁移期老数据仍走这条路），
+            // 但一旦该用户在 node_grants 里有记录，就以授权表为准。
+            query = `SELECT DISTINCT n.* FROM nodes n JOIN users u ON u.username = ? WHERE n.enable = 1 AND (n.traffic_limit = 0 OR n.traffic_used < n.traffic_limit) AND (n.expire_time = 0 OR n.expire_time > ?) AND u.enable = 1 AND (u.traffic_limit = 0 OR u.traffic_used < u.traffic_limit) AND (u.expire_time = 0 OR u.expire_time > ?) AND (EXISTS (SELECT 1 FROM node_grants g WHERE g.node_id = n.id AND g.username = u.username) OR n.username = u.username OR EXISTS (SELECT 1 FROM user_group_members gm JOIN user_group_resources gr ON gr.group_id = gm.group_id WHERE gm.username = u.username AND ((gr.resource_type = 'node' AND gr.resource_id = n.id) OR (gr.resource_type = 'vps' AND gr.resource_id = n.vps_ip))))`;
             sqlParams = [reqUser, now, now];
             if (ip) { query += " AND n.vps_ip = ?"; sqlParams.push(ip); }
         }
         
         const { results } = await db.prepare(query).bind(...sqlParams).all(); 
+
+        // 取出该用户在这些节点上的专属凭据。渲染链接时必须用这里的值，
+        // 而不是 nodes.uuid —— 上次全员断联正是两者不一致导致的。
+        const grantMap = new Map();
+        if (results.length && reqUser !== adminUser) {
+            const ids = results.map(r => r.id).filter(Boolean);
+            if (ids.length) {
+                for (let i = 0; i < ids.length; i += 80) {
+                    const slice = ids.slice(i, i + 80);
+                    try {
+                        const g = await db.prepare(`SELECT node_id, credential FROM node_grants WHERE username = ? AND node_id IN (${slice.map(() => '?').join(',')})`).bind(reqUser, ...slice).all();
+                        for (const row of (g.results || [])) grantMap.set(row.node_id, row.credential);
+                    } catch (e) {}
+                }
+            }
+        }
         
         let subLinks = [];
         let clashProxies = [];
@@ -1499,20 +1606,26 @@ rules:
             let cProxy = "";
             const nodeIp = formatIpForLink(node.vps_ip);
             const nodeSni = node.sni || '';
+            // 多人授权下该用户在这条节点上的专属凭据；没有则回退到节点主凭据。
+            // 渲染层与下发层（agent.py）必须用同一个值，否则客户端与服务端对不上 → 全员断连。
+            const grant = supportsMultiCredential(node.protocol) ? (grantMap.get(node.id) || '') : '';
+            const cred = credentialFor(node, reqUser, grant);            // uuid / password 型通用
+            const pass = passwordFor(node, reqUser, grant);
 
             // --- 传统 Base64 URL 生成 ---
+            // 凭据一律取按人值（cred/pass），不再直接读 node.uuid / node.private_key。
             switch (node.protocol) {
-                case "VLESS": link = `vless://${node.uuid}@${nodeIp}:${node.port}?encryption=none&security=none&type=tcp#${remark}`; break;
-                case "XTLS-Reality": case "Reality": link = `vless://${node.uuid}@${nodeIp}:${node.port}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${nodeSni}&fp=chrome&pbk=${node.public_key}&sid=${node.short_id || ""}&type=tcp&headerType=none#${remark}`; break;
-                case "Hysteria2": link = `hysteria2://${encodeURIComponent(node.uuid || node.private_key)}@${nodeIp}:${node.port}/?insecure=1&sni=${encodeURIComponent(nodeSni)}&alpn=h3#${remark}`; break;
-                case "TUIC": link = `tuic://${node.uuid}:${node.private_key}@${nodeIp}:${node.port}?sni=${nodeSni}&congestion_control=bbr&alpn=h3&allow_insecure=1#${remark}`; break;
-                case "Trojan": link = `trojan://${node.private_key}@${nodeIp}:${node.port}?security=tls&sni=${nodeSni}&allowInsecure=1&type=tcp#${remark}`; break;
-                case "H2-Reality": link = `vless://${node.uuid}@${nodeIp}:${node.port}?encryption=none&security=reality&sni=${nodeSni}&fp=chrome&pbk=${node.public_key}&sid=${node.short_id || ""}&type=http#${remark}`; break;
-                case "gRPC-Reality": link = `vless://${node.uuid}@${nodeIp}:${node.port}?encryption=none&security=reality&sni=${nodeSni}&fp=chrome&pbk=${node.public_key}&sid=${node.short_id || ""}&type=grpc&serviceName=grpc#${remark}`; break;
-                case "AnyTLS": link = `anytls://${node.private_key}@${nodeIp}:${node.port}?security=tls&sni=${nodeSni}&insecure=1#${remark}`; break;
+                case "VLESS": link = `vless://${cred}@${nodeIp}:${node.port}?encryption=none&security=none&type=tcp#${remark}`; break;
+                case "XTLS-Reality": case "Reality": link = `vless://${cred}@${nodeIp}:${node.port}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${nodeSni}&fp=chrome&pbk=${node.public_key}&sid=${node.short_id || ""}&type=tcp&headerType=none#${remark}`; break;
+                case "Hysteria2": link = `hysteria2://${encodeURIComponent(cred || node.private_key)}@${nodeIp}:${node.port}/?insecure=1&sni=${encodeURIComponent(nodeSni)}&alpn=h3#${remark}`; break;
+                case "TUIC": link = `tuic://${cred}:${pass}@${nodeIp}:${node.port}?sni=${nodeSni}&congestion_control=bbr&alpn=h3&allow_insecure=1#${remark}`; break;
+                case "Trojan": link = `trojan://${pass}@${nodeIp}:${node.port}?security=tls&sni=${nodeSni}&allowInsecure=1&type=tcp#${remark}`; break;
+                case "H2-Reality": link = `vless://${cred}@${nodeIp}:${node.port}?encryption=none&security=reality&sni=${nodeSni}&fp=chrome&pbk=${node.public_key}&sid=${node.short_id || ""}&type=http#${remark}`; break;
+                case "gRPC-Reality": link = `vless://${cred}@${nodeIp}:${node.port}?encryption=none&security=reality&sni=${nodeSni}&fp=chrome&pbk=${node.public_key}&sid=${node.short_id || ""}&type=grpc&serviceName=grpc#${remark}`; break;
+                case "AnyTLS": link = `anytls://${pass}@${nodeIp}:${node.port}?security=tls&sni=${nodeSni}&insecure=1#${remark}`; break;
                 case "Naive": link = `naive+https://${node.uuid}:${node.private_key}@${nodeIp}:${node.port}?security=tls&sni=${nodeSni}#${remark}`; break;
                 case "Socks5": link = `socks5://${btoa(`${node.uuid}:${node.private_key}`)}@${nodeIp}:${node.port}#${remark}`; break;
-                case "VLESS-Argo": if (!(node.sni || '').includes('等待')) link = `vless://${node.uuid}@${node.sni}:443?encryption=none&security=tls&type=ws&host=${node.sni}&path=%2F#${remark}-Argo`; break;
+                case "VLESS-Argo": if (!(node.sni || '').includes('等待')) link = `vless://${cred}@${node.sni}:443?encryption=none&security=tls&type=ws&host=${node.sni}&path=%2F#${remark}-Argo`; break;
             }
             if (link) subLinks.push(link);
 
@@ -1521,7 +1634,7 @@ rules:
                 if (node.protocol.includes("VLESS") || node.protocol.includes("Reality")) {
                     const serverIpOrSni = (node.protocol === 'VLESS-Argo' && !(node.sni || '').includes('等待')) ? node.sni : nodeIp;
                     const serverPort = node.protocol === 'VLESS-Argo' ? 443 : node.port;
-                    cProxy = `  - name: ${yamlString(rawRemark)}\n    type: vless\n    server: ${yamlString(serverIpOrSni)}\n    port: ${serverPort}\n    uuid: ${yamlString(node.uuid)}\n    udp: true`;
+                    cProxy = `  - name: ${yamlString(rawRemark)}\n    type: vless\n    server: ${yamlString(serverIpOrSni)}\n    port: ${serverPort}\n    uuid: ${yamlString(cred)}\n    udp: true`;
                     
                     if (node.protocol === "XTLS-Reality" || node.protocol === "Reality") {
                         cProxy += `\n    tls: true\n    flow: xtls-rprx-vision\n    servername: ${yamlString(nodeSni)}\n    client-fingerprint: chrome\n    reality-opts:\n      public-key: ${yamlString(node.public_key)}\n      short-id: ${yamlString(node.short_id || "")}`;
@@ -1533,13 +1646,13 @@ rules:
                         cProxy += `\n    tls: true\n    servername: ${yamlString(nodeSni)}\n    network: ws\n    ws-opts:\n      path: "/"\n      headers:\n        Host: ${yamlString(nodeSni)}`;
                     }
                 } else if (node.protocol === "Trojan") {
-                    cProxy = `  - name: ${yamlString(rawRemark)}\n    type: trojan\n    server: ${yamlString(nodeIp)}\n    port: ${node.port}\n    password: ${yamlString(node.private_key)}\n    udp: true\n    sni: ${yamlString(nodeSni)}\n    skip-cert-verify: true`;
+                    cProxy = `  - name: ${yamlString(rawRemark)}\n    type: trojan\n    server: ${yamlString(nodeIp)}\n    port: ${node.port}\n    password: ${yamlString(pass)}\n    udp: true\n    sni: ${yamlString(nodeSni)}\n    skip-cert-verify: true`;
                 } else if (node.protocol === "AnyTLS") {
-                    cProxy = `  - name: ${yamlString(rawRemark)}\n    type: anytls\n    server: ${yamlString(nodeIp)}\n    port: ${node.port}\n    password: ${yamlString(node.private_key)}\n    client-fingerprint: chrome\n    udp: true\n    sni: ${yamlString(nodeSni)}\n    skip-cert-verify: true`;
+                    cProxy = `  - name: ${yamlString(rawRemark)}\n    type: anytls\n    server: ${yamlString(nodeIp)}\n    port: ${node.port}\n    password: ${yamlString(pass)}\n    client-fingerprint: chrome\n    udp: true\n    sni: ${yamlString(nodeSni)}\n    skip-cert-verify: true`;
                 } else if (node.protocol === "Hysteria2") {
-                    cProxy = `  - name: ${yamlString(rawRemark)}\n    type: hysteria2\n    server: ${yamlString(nodeIp)}\n    port: ${node.port}\n    password: ${yamlString(node.uuid || node.private_key)}\n    sni: ${yamlString(nodeSni)}\n    skip-cert-verify: true`;
+                    cProxy = `  - name: ${yamlString(rawRemark)}\n    type: hysteria2\n    server: ${yamlString(nodeIp)}\n    port: ${node.port}\n    password: ${yamlString(cred || node.private_key)}\n    sni: ${yamlString(nodeSni)}\n    skip-cert-verify: true`;
                 } else if (node.protocol === "TUIC") {
-                    cProxy = `  - name: ${yamlString(rawRemark)}\n    type: tuic\n    server: ${yamlString(nodeIp)}\n    port: ${node.port}\n    uuid: ${yamlString(node.uuid)}\n    password: ${yamlString(node.private_key)}\n    sni: ${yamlString(nodeSni)}\n    skip-cert-verify: true`;
+                    cProxy = `  - name: ${yamlString(rawRemark)}\n    type: tuic\n    server: ${yamlString(nodeIp)}\n    port: ${node.port}\n    uuid: ${yamlString(cred)}\n    password: ${yamlString(pass)}\n    sni: ${yamlString(nodeSni)}\n    skip-cert-verify: true`;
                 }
                 
                 if (cProxy) {
@@ -1808,7 +1921,21 @@ rules:
             }
             // 历史节点归属用的是字面量 'admin'，ensureDbSchema 里已做通用迁移（每次请求都跑，且
             // 在 /api/setup 之后，管理员一旦自建名就立即生效），此处不再重复一次性迁移。
-            const nodes = isAdmin ? (await db.prepare("SELECT * FROM nodes").all()).results : (await db.prepare("SELECT DISTINCT n.* FROM nodes n WHERE n.username = ? OR EXISTS (SELECT 1 FROM user_group_members gm JOIN user_group_resources gr ON gr.group_id = gm.group_id WHERE gm.username = ? AND ((gr.resource_type = 'node' AND gr.resource_id = n.id) OR (gr.resource_type = 'vps' AND gr.resource_id = n.vps_ip)))").bind(currentUser, currentUser).all()).results;
+            // 管理员看全量；普通用户看「被自己授权的 + 旧归属自己的 + 用户组授予的」。
+            // node_grants 是多对多授权的事实来源，必须并入，否则被授权者在面板上看不到自己的节点。
+            const nodes = isAdmin ? (await db.prepare("SELECT * FROM nodes").all()).results : (await db.prepare("SELECT DISTINCT n.* FROM nodes n WHERE EXISTS (SELECT 1 FROM node_grants g WHERE g.node_id = n.id AND g.username = ?) OR n.username = ? OR EXISTS (SELECT 1 FROM user_group_members gm JOIN user_group_resources gr ON gr.group_id = gm.group_id WHERE gm.username = ? AND ((gr.resource_type = 'node' AND gr.resource_id = n.id) OR (gr.resource_type = 'vps' AND gr.resource_id = n.vps_ip)))").bind(currentUser, currentUser, currentUser).all()).results;
+            // 给每个节点挂上被授权的用户名列表，供前端授权页勾选状态回显。
+            // 只下发username，不下发 credential —— 凭据只用于服务端下发 sing-box，
+            // 泄露到浏览器等于把所有人的凭据公开。
+            try {
+                const grantMap = new Map();
+                const g = await db.prepare("SELECT node_id, username FROM node_grants").all();
+                for (const r of (g.results || [])) {
+                    if (!grantMap.has(r.node_id)) grantMap.set(r.node_id, []);
+                    grantMap.get(r.node_id).push(r.username);
+                }
+                for (const n of nodes) n._grant_users = grantMap.get(n.id) || [];
+            } catch (e) { for (const n of nodes) n._grant_users = []; }
             // 列白名单：不把 password 哈希下发到浏览器（用户已改为无账密模式，只需订阅令牌）。
             const users = isAdmin ? (await db.prepare("SELECT username, sub_token, enable, traffic_limit, traffic_used, expire_time FROM users ORDER BY username").all()).results : (await db.prepare("SELECT username, sub_token, enable, traffic_limit, traffic_used, expire_time FROM users WHERE username = ?").bind(currentUser).all()).results;
             const groups = isAdmin ? (await db.prepare("SELECT g.*, COALESCE((SELECT json_group_array(username) FROM user_group_members WHERE group_id = g.id), '[]') AS members, COALESCE((SELECT json_group_array(json_object('type', resource_type, 'id', resource_id)) FROM user_group_resources WHERE group_id = g.id), '[]') AS resources FROM user_groups g ORDER BY g.name").all()).results : [];
@@ -1861,14 +1988,85 @@ rules:
             if (!/^[A-Za-z0-9_.-]{1,64}$/.test(safeUser) || safeUser === currentUser) return Response.json({ error: 'Invalid or reserved username' }, { status: 400 }); if (await db.prepare("SELECT username FROM users WHERE username = ?").bind(safeUser).first()) return Response.json({ error: "User already exists" }, { status: 409 }); const subToken = crypto.randomUUID(); await db.prepare("INSERT INTO users (username, password, sub_token) VALUES (?, ?, ?)").bind(safeUser, crypto.randomUUID(), subToken).run(); return Response.json({ success: true, token: subToken }); }
             // 停用/启用是「热踢」的开关：置enable=0 后订阅立刻 404、节点从所有 VPS 撤下，
             // 同时通知各 VPS agent 用 iptables DROP 该用户名下所有节点端口（无需重启 sing-box）。
-            if (method === "PUT") { const { username, enable } = await request.json(); if (!username) return Response.json({ error: 'username required' }, { status: 400 }); if (enable === undefined) return Response.json({ error: 'enable required' }, { status: 400 }); await db.prepare("UPDATE users SET enable = ? WHERE username = ?").bind(enable ? 1 : 0, username).run(); const affectedIps = (await db.prepare("SELECT DISTINCT vps_ip AS ip FROM nodes WHERE username = ?").bind(username).all()).results.map(r => r.ip); for (const ip of affectedIps) context.waitUntil(notifyRealtimeVps(env, db, ip).catch(() => {})); return Response.json({ success: true, affected_servers: affectedIps.length }); }
+            if (method === "PUT") { const { username, enable } = await request.json(); if (!username) return Response.json({ error: 'username required' }, { status: 400 }); if (enable === undefined) return Response.json({ error: 'enable required' }, { status: 400 }); await db.prepare("UPDATE users SET enable = ? WHERE username = ?").bind(enable ? 1 : 0, username).run();
+                // 停用/启用用户时，受影响的 VPS 有两处来源：旧的 nodes.username 单归属节点，
+                // 以及 node_grants 授权表里的节点。只查前者会导致「停用后节点照常可用」。
+                const affectedIpSet = new Set();
+                try { for (const r of (await db.prepare("SELECT DISTINCT n.vps_ip AS ip FROM nodes n JOIN node_grants g ON g.node_id = n.id WHERE g.username = ?").bind(username).all()).results) if (r.ip) affectedIpSet.add(r.ip); } catch (e) {}
+                try { for (const r of (await db.prepare("SELECT DISTINCT vps_ip AS ip FROM nodes WHERE username = ?").bind(username).all()).results) if (r.ip) affectedIpSet.add(r.ip); } catch (e) {}
+                const affectedIps = [...affectedIpSet];
+                for (const ip of affectedIps) context.waitUntil(notifyRealtimeVps(env, db, ip).catch(() => {}));
+                return Response.json({ success: true, affected_servers: affectedIps.length }); }
             // 删用户必须同时回收 nodes.username，否则节点页会一直显示「归属 <已删用户>」：
             // DELETE 只删 users / user_group_members 两张表，节点页直接读 nodes.username 渲染。
             // 回收后的节点归属回到当前管理员，与 PATCH 取消勾选时的行为一致。
-            if (method === "DELETE") { const target = new URL(request.url).searchParams.get("username"); const affectedIps = (await db.prepare("SELECT DISTINCT vps_ip AS ip FROM nodes WHERE username = ?").bind(target).all()).results.map(r => r.ip); await db.batch([db.prepare("DELETE FROM user_group_members WHERE username = ?").bind(target), db.prepare("UPDATE nodes SET username = ? WHERE username = ?").bind(currentUser, target), db.prepare("DELETE FROM users WHERE username = ?").bind(target)]); for (const ip of affectedIps) context.waitUntil(notifyRealtimeVps(env, db, ip).catch(() => {})); return Response.json({ success: true }); }
+            // 删除用户：回收其在node_grants 里的全部凭据（凭据删掉即被踢下线），
+            // 同时清理用户组成员关系，并把单归属节点归还管理员。
+            // 受影响 VPS 需同时从 node_grants 与 nodes.username 两处收集，漏一处就会
+            // 出现「用户已删但节点还在放行其凭据」。
+            if (method === "DELETE") {
+                const target = new URL(request.url).searchParams.get("username");
+                const affectedIpSet = new Set();
+                try { for (const r of (await db.prepare("SELECT DISTINCT n.vps_ip AS ip FROM nodes n JOIN node_grants g ON g.node_id = n.id WHERE g.username = ?").bind(target).all()).results) if (r.ip) affectedIpSet.add(r.ip); } catch (e) {}
+                try { for (const r of (await db.prepare("SELECT DISTINCT vps_ip AS ip FROM nodes WHERE username = ?").bind(target).all()).results) if (r.ip) affectedIpSet.add(r.ip); } catch (e) {}
+                await db.batch([
+                    db.prepare("DELETE FROM node_grants WHERE username = ?").bind(target),
+                    db.prepare("DELETE FROM user_group_members WHERE username = ?").bind(target),
+                    db.prepare("UPDATE nodes SET username = ? WHERE username = ?").bind(currentUser, target),
+                    db.prepare("DELETE FROM users WHERE username = ?").bind(target)
+                ]);
+                const affectedIps = [...affectedIpSet];
+                for (const ip of affectedIps) context.waitUntil(notifyRealtimeVps(env, db, ip).catch(() => {}));
+                return Response.json({ success: true, affected_servers: affectedIps.length });
+            }
             // 用户行内直接改节点归属（替代原「用户组」机制：组要建组+勾成员+勾资源三步，
             // 且组员流量记在节点归属人头上导致限额永远不准）。逐个节点写 username。
-            if (method === "PATCH") { const { username, nodes: nodeList } = await request.json(); if (!username || !Array.isArray(nodeList)) return Response.json({ error: 'username and nodes[] required' }, { status: 400 }); if (username === currentUser) return Response.json({ error: 'Cannot reassign admin-owned nodes' }, { status: 400 }); const owned = (await db.prepare("SELECT id FROM nodes WHERE username = ?").bind(username).all()).results.map(r => r.id); const target = nodeList.map(id => String(id)).filter(id => /^[A-Za-z0-9_-]{1,64}$/.test(id)); const release = owned.filter(id => !target.includes(id)); const stmts = []; for (const id of release) stmts.push(db.prepare("UPDATE nodes SET username = ? WHERE id = ?").bind(currentUser, id)); for (const id of target) stmts.push(db.prepare("UPDATE nodes SET username = ? WHERE id = ? AND username != ?").bind(username, id, username)); if (stmts.length) await chunkBatch(db, stmts, 100); const touchedIds = [...new Set(release.concat(target))]; let affectedIps = []; if (touchedIds.length) { for (let i = 0; i < touchedIds.length; i += 80) { const slice = touchedIds.slice(i, i + 80); const rows = await db.prepare(`SELECT DISTINCT vps_ip AS ip FROM nodes WHERE id IN (${slice.map(() => '?').join(',')})`).bind(...slice).all(); affectedIps.push(...(rows.results || []).map(r => r.ip)); } } affectedIps = [...new Set(affectedIps)]; for (const ip of affectedIps) context.waitUntil(notifyRealtimeVps(env, db, ip).catch(() => {})); return Response.json({ success: true, affected_servers: affectedIps.length }); }
+            // 多对多授权：勾选 = 为该用户在这条节点上开通一份独立凭据；
+            // 取消勾选 = 撤销该凭据（用户下次握手即被拒 = 精准踢人），节点本身不受影响，
+            // 其他用户的授权完全保留。
+            //
+            // 与旧「改归属」的本质区别：旧逻辑 UPDATE nodes.username 把节点整体过户，
+            // 一条节点只能有一个 username；新逻辑操作node_grants 一表，
+            // (node_id, username) 为联合主键，因此同一节点可同时授权给任意多个用户。
+            if (method === "PATCH") {
+                const { username, nodes: nodeList } = await request.json();
+                if (!username || !Array.isArray(nodeList)) return Response.json({ error: 'username and nodes[] required' }, { status: 400 });
+                const target = [...new Set(nodeList.map(id => String(id)).filter(id => /^[A-Za-z0-9_-]{1,64}$/.test(id)))];
+                // 只对支持多凭据的协议生成独立凭据；其余协议（Naive/Socks5/dokodemo 等）
+                // 维持原单归属语义，不进授权表。
+                let grantable = new Set();
+                if (target.length) {
+                    const rows = await db.prepare(`SELECT id, protocol FROM nodes WHERE id IN (${target.map(() => '?').join(',')})`).bind(...target).all();
+                    for (const r of (rows.results || [])) if (supportsMultiCredential(r.protocol)) grantable.add(r.id);
+                }
+                const owned = (await db.prepare("SELECT node_id FROM node_grants WHERE username = ?").bind(username).all()).results.map(r => r.node_id);
+                const add = target.filter(id => grantable.has(id) && !owned.includes(id));
+                const remove = owned.filter(id => !target.includes(id));
+                const stmts = [];
+                const now = Date.now();
+                for (const id of remove) stmts.push(db.prepare("DELETE FROM node_grants WHERE node_id = ? AND username = ?").bind(id, username));
+                // 已在授权表里的节点保留原凭据（不能重新生成，否则已发给客户端的链接会失效）；
+                // 只有新增授权时才生成新的独立凭据。
+                for (const id of add) {
+                    const proto = (await db.prepare("SELECT protocol FROM nodes WHERE id = ?").bind(id).first())?.protocol || '';
+                    stmts.push(db.prepare("INSERT OR REPLACE INTO node_grants (node_id, username, credential, created_at) VALUES (?, ?, ?, ?)").bind(id, username, generateCredential(proto), now));
+                }
+                // 单归属协议的旧数据清理：把这些节点归还给管理员，避免两边语义打架。
+                for (const id of target) if (!grantable.has(id)) stmts.push(db.prepare("UPDATE nodes SET username = ? WHERE id = ? AND username = ?").bind(currentUser, id, username));
+                if (stmts.length) await chunkBatch(db, stmts, 100);
+                const touchedIds = [...new Set(remove.concat(add))];
+                let affectedIps = [];
+                if (touchedIds.length) {
+                    for (let i = 0; i < touchedIds.length; i += 80) {
+                        const slice = touchedIds.slice(i, i + 80);
+                        const rows = await db.prepare(`SELECT DISTINCT vps_ip AS ip FROM nodes WHERE id IN (${slice.map(() => '?').join(',')})`).bind(...slice).all();
+                        affectedIps.push(...(rows.results || []).map(r => r.ip));
+                    }
+                }
+                affectedIps = [...new Set(affectedIps)];
+                for (const ip of affectedIps) context.waitUntil(notifyRealtimeVps(env, db, ip).catch(() => {}));
+                return Response.json({ success: true, affected_servers: affectedIps.length, granted: add.length, revoked: remove.length, skipped_single_ownership: target.filter(id => !grantable.has(id)).length });
+            }
         }
 
         if (action === "groups" && isAdmin) {
@@ -1919,7 +2117,7 @@ rules:
             if (method === "PUT") { const data = await request.json(); const ip = data.ip; if (!ip) return Response.json({ error: 'IP required' }, { status: 400 }); if (data.egress_mode === undefined) return Response.json({ error: 'Use egress_mode to configure node egress' }, { status: 400 }); const modes = ['native', 'residential', 'warp_ipv4', 'warp_ipv6', 'warp_dual', 'socks5']; if (!modes.includes(data.egress_mode)) return Response.json({ error: 'Invalid egress mode' }, { status: 400 }); if (data.egress_mode === 'residential' && env.PROXY_CTRL_URL) return Response.json({ error: '外部住宅控制器模式不支持本机住宅节点出口' }, { status: 409 }); if (data.egress_mode === 'residential' && (!env.PROXY_USER || !env.PROXY_PASS)) return Response.json({ error: 'Pages 未配置住宅代理凭据' }, { status: 503 }); const proxyMode = data.proxy_mode === 'selective' ? 'selective' : 'global'; const proxyCategories = data.proxy_categories ? String(data.proxy_categories) : ''; const socks5Addr = String(data.socks5_addr || '').slice(0, 128); const socks5Port = Math.min(65535, Math.max(1, Number(data.socks5_port) || 0)); const socks5User = String(data.socks5_user || '').slice(0, 64); const socks5Pass = String(data.socks5_pass || '').slice(0, 128); let changed; if (data.egress_mode === 'socks5' && socks5Addr && socks5Port) { changed = await db.prepare("UPDATE servers SET egress_mode = ?, egress_revision = egress_revision + 1, egress_status = 'pending', egress_error = '', proxy_mode = ?, proxy_categories = ?, socks5_addr = ?, socks5_port = ?, socks5_user = ?, socks5_pass = ? WHERE ip = ? RETURNING egress_revision").bind(data.egress_mode, proxyMode, proxyCategories, socks5Addr, socks5Port, socks5User, socks5Pass, ip).first(); } else { changed = await db.prepare("UPDATE servers SET egress_mode = ?, egress_revision = egress_revision + 1, egress_status = 'pending', egress_error = '', proxy_mode = ?, proxy_categories = ? WHERE ip = ? RETURNING egress_revision").bind(data.egress_mode, proxyMode, proxyCategories, ip).first(); } if (!changed) return Response.json({ error: 'VPS not found' }, { status: 404 }); context.waitUntil(notifyRealtimeVps(env, db, ip).catch(() => {})); return Response.json({ success: true, ip, egress_mode: data.egress_mode, egress_revision: Number(changed.egress_revision), egress_status: 'pending', proxy_mode: proxyMode, proxy_categories: proxyCategories, socks5_addr: data.egress_mode === 'socks5' ? socks5Addr : '', socks5_port: data.egress_mode === 'socks5' ? socks5Port : 0 }); }
             if (method === "DELETE") { 
                 const ip = new URL(request.url).searchParams.get("ip"); 
-                await db.batch([ db.prepare("INSERT OR REPLACE INTO retired_agent_tokens (token, ip, retired_at) SELECT agent_token, ip, ? FROM servers WHERE ip = ? AND agent_token IS NOT NULL").bind(Date.now(), ip), db.prepare("DELETE FROM retired_agent_tokens WHERE retired_at < ?").bind(Date.now() - 30 * 86400000), db.prepare("DELETE FROM user_group_resources WHERE resource_type = 'vps' AND resource_id = ?").bind(ip), db.prepare("DELETE FROM user_group_resources WHERE resource_type = 'node' AND resource_id IN (SELECT id FROM nodes WHERE vps_ip = ?)").bind(ip), db.prepare("DELETE FROM nodes WHERE vps_ip = ?").bind(ip), db.prepare("DELETE FROM traffic_stats WHERE ip = ?").bind(ip), db.prepare("DELETE FROM servers WHERE ip = ?").bind(ip), db.prepare("DELETE FROM probe_servers WHERE id = ?").bind(ip), db.prepare("DELETE FROM proxy_ctrl_servers WHERE ip = ?").bind(ip), db.prepare("DELETE FROM server_logs WHERE ip = ?").bind(ip), db.prepare("DELETE FROM probe_settings WHERE key = ?").bind(`proxy_slot_map_${ip}`) ]);
+                await db.batch([ db.prepare("INSERT OR REPLACE INTO retired_agent_tokens (token, ip, retired_at) SELECT agent_token, ip, ? FROM servers WHERE ip = ? AND agent_token IS NOT NULL").bind(Date.now(), ip), db.prepare("DELETE FROM retired_agent_tokens WHERE retired_at < ?").bind(Date.now() - 30 * 86400000), db.prepare("DELETE FROM user_group_resources WHERE resource_type = 'vps' AND resource_id = ?").bind(ip), db.prepare("DELETE FROM user_group_resources WHERE resource_type = 'node' AND resource_id IN (SELECT id FROM nodes WHERE vps_ip = ?)").bind(ip), db.prepare("DELETE FROM node_grants WHERE node_id IN (SELECT id FROM nodes WHERE vps_ip = ?)").bind(ip), db.prepare("DELETE FROM nodes WHERE vps_ip = ?").bind(ip), db.prepare("DELETE FROM traffic_stats WHERE ip = ?").bind(ip), db.prepare("DELETE FROM servers WHERE ip = ?").bind(ip), db.prepare("DELETE FROM probe_servers WHERE id = ?").bind(ip), db.prepare("DELETE FROM proxy_ctrl_servers WHERE ip = ?").bind(ip), db.prepare("DELETE FROM server_logs WHERE ip = ?").bind(ip), db.prepare("DELETE FROM probe_settings WHERE key = ?").bind(`proxy_slot_map_${ip}`) ]);
                 return Response.json({ success: true }); 
             }
         }
@@ -1930,7 +2128,7 @@ rules:
                 const grantTargets = [...new Set([nodeUser, currentUser])];
                 context.waitUntil(notifyRealtimeVps(env, db, n.vps_ip).catch(()=>{})); return Response.json({ success: true }); }
             if (method === "PUT") { const { id, enable, reset_traffic } = await request.json(); const node = await db.prepare('SELECT vps_ip FROM nodes WHERE id = ?').bind(id).first(); if (!node) return Response.json({ error: 'Node not found' }, { status: 404 }); const statements = []; if (reset_traffic) statements.push(db.prepare("UPDATE nodes SET traffic_used = 0 WHERE id = ?").bind(id)); if (enable !== undefined) statements.push(db.prepare("UPDATE nodes SET enable = ? WHERE id = ?").bind(enable ? 1 : 0, id)); if (statements.length) await db.batch(statements); context.waitUntil(notifyRealtimeVps(env, db, node.vps_ip).catch(()=>{})); return Response.json({ success: true }); }
-            if (method === "DELETE") { const id = new URL(request.url).searchParams.get("id"); const node = await db.prepare('SELECT vps_ip FROM nodes WHERE id = ?').bind(id).first(); await db.batch([db.prepare("DELETE FROM user_group_resources WHERE resource_type = 'node' AND resource_id = ?").bind(id), db.prepare("DELETE FROM nodes WHERE id = ?").bind(id)]); if (node) context.waitUntil(notifyRealtimeVps(env, db, node.vps_ip).catch(()=>{})); return Response.json({ success: true }); }
+            if (method === "DELETE") { const id = new URL(request.url).searchParams.get("id"); const node = await db.prepare('SELECT vps_ip FROM nodes WHERE id = ?').bind(id).first(); await db.batch([db.prepare("DELETE FROM user_group_resources WHERE resource_type = 'node' AND resource_id = ?").bind(id), db.prepare("DELETE FROM node_grants WHERE node_id = ?").bind(id), db.prepare("DELETE FROM nodes WHERE id = ?").bind(id)]); if (node) context.waitUntil(notifyRealtimeVps(env, db, node.vps_ip).catch(()=>{})); return Response.json({ success: true }); }
         }
 
     if (action === "thirdparty" && isAdmin) {

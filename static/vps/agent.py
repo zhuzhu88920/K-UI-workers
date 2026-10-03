@@ -945,6 +945,36 @@ def build_singbox_config(nodes, proxy_cfg=None, peers=None, mesh=None, socks5_ou
             continue
         sni = node.get("sni") or "addons.mozilla.org"
         clean_uuid = node.get('uuid', '').replace('-', '')
+
+        # ==========================================================
+        #  多对多凭据聚合
+        # ==========================================================
+        #  CF 侧 node_grants 表按 (node_id, username) 存每人的独立凭据，
+        #  下发时以 node_grants 字段随 configs 一并送到本机。
+        #
+        #  已用本机 sing-box 1.12.12 实测：users 数组挂多个 uuid / password 均合法，
+        #  且与 inbound 级的 tls / Reality(private_key, short_id) 完全正交
+        #  —— 所以多人授权不需要为每个人单独生成 Reality 密钥。
+        #
+        #  本函数是唯一的 users 构造入口。此前 10 个协议分支各自硬编码单元素 users，
+        #  是上次「改了数据库但没改下发」导致全员断联的结构性根因。
+        #
+        #  凭据类型按协议二分：
+        #    uuid 型   —— VLESS / XTLS-Reality / H2-Reality / gRPC-Reality
+        #    password 型 —— Hysteria2 / Trojan / AnyTLS（TUIC 两者都要）
+        grant_rows = node.get("grants") or []
+        grant_users = []
+        seen_cred = set()
+        for g in grant_rows:
+            cred = (g.get("credential") or "").strip()
+            if not cred or cred in seen_cred:
+                continue
+            seen_cred.add(cred)
+            grant_users.append(cred)
+        if not grant_users:
+            # 无授权记录（老库/ 未迁移 / 单归属模式）：回退到节点主凭据，行为与旧版一致
+            grant_users = [node.get("uuid") or ""]
+        grant_users = [u for u in grant_users if u]
         
         if proto in ["Hysteria2", "TUIC", "Trojan", "VLESS-WS-TLS", "AnyTLS", "Naive"]:
             cert_path, key_path = f"/opt/kui/cert_{node['id']}.pem", f"/opt/kui/key_{node['id']}.pem"
@@ -960,17 +990,20 @@ def build_singbox_config(nodes, proxy_cfg=None, peers=None, mesh=None, socks5_ou
                 try: os.remove(conf_path)
                 except: pass
         
-        if proto == "VLESS": singbox_config["inbounds"].append({"type": "vless", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"uuid": node["uuid"]}]})
-        elif proto in ["XTLS-Reality", "Reality"]: singbox_config["inbounds"].append({"type": "vless", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"uuid": node["uuid"], "flow": "xtls-rprx-vision"}], "tls": {"enabled": True, "server_name": sni, "reality": {"enabled": True, "handshake": {"server": sni, "server_port": 443}, "private_key": node["private_key"], "short_id": [node["short_id"]]}}})
-        elif proto == "Hysteria2": singbox_config["inbounds"].append({"type": "hysteria2", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"password": node["uuid"]}], "tls": {"enabled": True, "alpn": ["h3"], "certificate_path": cert_path, "key_path": key_path}})
-        elif proto == "TUIC": singbox_config["inbounds"].append({"type": "tuic", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"uuid": node["uuid"], "password": node["private_key"]}], "tls": {"enabled": True, "alpn": ["h3"], "certificate_path": cert_path, "key_path": key_path}})
-        elif proto == "Trojan": singbox_config["inbounds"].append({"type": "trojan", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"password": node["private_key"]}], "tls": {"enabled": True, "server_name": sni, "certificate_path": cert_path, "key_path": key_path}})
-        elif proto == "H2-Reality": singbox_config["inbounds"].append({"type": "vless", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"uuid": node["uuid"]}], "tls": {"enabled": True, "alpn": ["h2", "http/1.1"], "reality": {"enabled": True, "handshake": {"server": sni, "server_port": 443}, "private_key": node["private_key"], "short_id": [node["short_id"]]}}, "transport": {"type": "http", "host": [sni], "path": "/"}})
-        elif proto == "gRPC-Reality": singbox_config["inbounds"].append({"type": "vless", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"uuid": node["uuid"]}], "tls": {"enabled": True, "alpn": ["h2"], "reality": {"enabled": True, "handshake": {"server": sni, "server_port": 443}, "private_key": node["private_key"], "short_id": [node["short_id"]]}}, "transport": {"type": "grpc", "service_name": "grpc"}})
-        elif proto == "AnyTLS": singbox_config["inbounds"].append({"type": "anytls", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"password": node["private_key"]}], "tls": {"enabled": True, "certificate_path": cert_path, "key_path": key_path}})
+        # users 一律由 grant_users 聚合而成：uuid 型 protocols 每人一个 uuid，
+        # password 型每人一个 password，TUIC 两者都要。没有授权记录时回退到主凭据。
+        uuid_users = [{"uuid": c} for c in grant_users]
+        if proto == "VLESS": singbox_config["inbounds"].append({"type": "vless", "tag": in_tag, "listen": "::", "listen_port": port, "users": uuid_users})
+        elif proto in ["XTLS-Reality", "Reality"]: singbox_config["inbounds"].append({"type": "vless", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"uuid": c, "flow": "xtls-rprx-vision"} for c in grant_users], "tls": {"enabled": True, "server_name": sni, "reality": {"enabled": True, "handshake": {"server": sni, "server_port": 443}, "private_key": node["private_key"], "short_id": [node["short_id"]]}}})
+        elif proto == "Hysteria2": singbox_config["inbounds"].append({"type": "hysteria2", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"password": c} for c in grant_users], "tls": {"enabled": True, "alpn": ["h3"], "certificate_path": cert_path, "key_path": key_path}})
+        elif proto == "TUIC": singbox_config["inbounds"].append({"type": "tuic", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"uuid": c, "password": c} for c in grant_users], "tls": {"enabled": True, "alpn": ["h3"], "certificate_path": cert_path, "key_path": key_path}})
+        elif proto == "Trojan": singbox_config["inbounds"].append({"type": "trojan", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"password": c} for c in grant_users], "tls": {"enabled": True, "server_name": sni, "certificate_path": cert_path, "key_path": key_path}})
+        elif proto == "H2-Reality": singbox_config["inbounds"].append({"type": "vless", "tag": in_tag, "listen": "::", "listen_port": port, "users": uuid_users, "tls": {"enabled": True, "alpn": ["h2", "http/1.1"], "reality": {"enabled": True, "handshake": {"server": sni, "server_port": 443}, "private_key": node["private_key"], "short_id": [node["short_id"]]}}, "transport": {"type": "http", "host": [sni], "path": "/"}})
+        elif proto == "gRPC-Reality": singbox_config["inbounds"].append({"type": "vless", "tag": in_tag, "listen": "::", "listen_port": port, "users": uuid_users, "tls": {"enabled": True, "alpn": ["h2"], "reality": {"enabled": True, "handshake": {"server": sni, "server_port": 443}, "private_key": node["private_key"], "short_id": [node["short_id"]]}}, "transport": {"type": "grpc", "service_name": "grpc"}})
+        elif proto == "AnyTLS": singbox_config["inbounds"].append({"type": "anytls", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"password": c} for c in grant_users], "tls": {"enabled": True, "certificate_path": cert_path, "key_path": key_path}})
         elif proto == "Naive": singbox_config["inbounds"].append({"type": "naive", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"username": node["uuid"], "password": node["private_key"]}], "tls": {"enabled": True, "certificate_path": cert_path, "key_path": key_path}})
         elif proto == "Socks5": singbox_config["inbounds"].append({"type": "socks", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"username": node["uuid"], "password": node["private_key"]}]})
-        elif proto == "VLESS-Argo": singbox_config["inbounds"].append({"type": "vless", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"uuid": node["uuid"]}], "transport": {"type": "ws", "path": "/"}})
+        elif proto == "VLESS-Argo": singbox_config["inbounds"].append({"type": "vless", "tag": in_tag, "listen": "::", "listen_port": port, "users": uuid_users, "transport": {"type": "ws", "path": "/"}})
         elif proto == "dokodemo-door":
             singbox_config["inbounds"].append({ "type": "direct", "tag": in_tag, "listen": "::", "listen_port": port })
             out_tag = f"out-{node['id']}"
@@ -1392,6 +1425,19 @@ def fetch_and_apply_configs():
                 realtime_channel = create_realtime_channel()
                 realtime_channel.start()
             nodes = data.get("configs", [])
+            # 多对多：把下发的授权凭据按 node_id 挂回节点，build_inbound 再据此
+            # 聚合 users 数组。CF 侧已过滤掉停用/过期用户，所以这里拿到的
+            # 就是「当前应该被放行的人」。老版 CF 不下发该字段时自动降级。
+            try:
+                grants_by_node = {}
+                for row in (data.get("node_grants") or []):
+                    nid = row.get("node_id")
+                    if nid:
+                        grants_by_node.setdefault(nid, []).append({"username": row.get("username"), "credential": row.get("credential")})
+                for n in nodes:
+                    n["grants"] = grants_by_node.get(n.get("id"), [])
+            except Exception as grantErr:
+                print(f"[agent] 授权凭据挂载失败，退回单凭据模式：{grantErr}", flush=True)
             # 热踢：无论本次配置是否有变化，都要按最新名单重放端口封禁。
             # 放在 sing-box 重启逻辑之外——封端口不需要重启服务，且重启期间依然生效。
             try:

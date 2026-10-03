@@ -13,6 +13,52 @@
         if (!window.Vue) document.write('<script src="https://cdn.jsdelivr.net/npm/vue@3.5.17/dist/vue.global.prod.js"><\/script>');
     </script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        /* ============ VI ② 北欧清爽：整组重映射 Tailwind 色板（不动任何 class 名） ============ */
+        if (window.tailwind) {
+            tailwind.config = {
+                theme: {
+                    extend: {
+                        colors: {
+                            /* 中性：冷灰（原 slate） */
+                            slate: { 50:'#f7f9fb', 100:'#eef2f6', 200:'#dfe6ec', 300:'#c8d3dd', 400:'#93a3b3', 500:'#6b7d90', 600:'#4d5d6d', 700:'#33414f', 800:'#16212b', 900:'#0d151d' },
+                            /* 主色：青绿（原 indigo） */
+                            indigo: { 50:'#eef7f5', 100:'#d3ebe6', 200:'#a8d7cf', 300:'#74bdb2', 400:'#3fa296', 500:'#0e9488', 600:'#0b7f75', 700:'#0a6660', 800:'#084f4a', 900:'#063634' },
+                            /* 次色：蓝绿（原 purple / violet） */
+                            purple: { 50:'#eef6f8', 100:'#d5e9ef', 200:'#a9cfdc', 300:'#75b0c4', 400:'#3f8da6', 500:'#0e7490', 600:'#0c6279', 700:'#0a4f61', 800:'#083e4c', 900:'#052a33' },
+                            violet: { 50:'#eef6f8', 100:'#d5e9ef', 200:'#a9cfdc', 300:'#75b0c4', 400:'#3f8da6', 500:'#0e7490', 600:'#0c6279', 700:'#0a4f61', 800:'#083e4c', 900:'#052a33' },
+                            /* 状态色：低饱和 */
+                            emerald: { 50:'#edf7f0', 100:'#d3ecdb', 200:'#a8d8b6', 300:'#77bf8f', 400:'#46a169', 500:'#0f9d58', 600:'#0b8148', 700:'#09673a', 800:'#07502e', 900:'#04321d' },
+                            rose: { 50:'#fdf0f1', 100:'#fbdbdf', 200:'#f6b7bf', 300:'#ec8b97', 400:'#df5b6b', 500:'#dc2626', 600:'#b91c1c', 700:'#941616', 800:'#761212', 900:'#4c0b0b' },
+                            amber: { 50:'#fdf6ec', 100:'#fae9cd', 200:'#f4d29a', 300:'#eab862', 400:'#dd9a3b', 500:'#b45309', 600:'#92400e', 700:'#78350f', 800:'#5c2a0d', 900:'#3a1b08' },
+                            blue: { 50:'#eff4fd', 100:'#dbe6fb', 200:'#bccdf6', 300:'#93abee', 400:'#6b85e3', 500:'#2563eb', 600:'#1d4ed8', 700:'#1e3fa8', 800:'#1e3585', 900:'#172554' },
+                            orange: { 50:'#fdf3ec', 100:'#fbe3d1', 200:'#f6c6a1', 300:'#eda36b', 400:'#e07c3c', 500:'#c2410c', 600:'#9a3412', 700:'#7c2d12', 800:'#5f260f', 900:'#3b180a' },
+                            cyan: { 50:'#eef7f8', 100:'#d3ebee', 200:'#a8d6dc', 300:'#75bcc5', 400:'#3f9cab', 500:'#0891b2', 600:'#0e7490', 700:'#0e5e75', 800:'#0c4a5c', 900:'#08303c' },
+                            sky: { 50:'#eff6fb', 100:'#dbeaf7', 200:'#bcd5ee', 300:'#93b9e1', 400:'#6b96d2', 500:'#0284c7', 600:'#0369a1', 700:'#075985', 800:'#0c4a6e', 900:'#0c2d48' },
+                            gray: { 50:'#f7f9fb', 100:'#eef2f6', 200:'#dfe6ec', 300:'#c8d3dd', 400:'#93a3b3', 500:'#6b7d90', 600:'#4d5d6d', 700:'#33414f', 800:'#16212b', 900:'#0d151d' },
+                            zinc: { 50:'#f7f9fb', 100:'#eef2f6', 200:'#dfe6ec', 300:'#c8d3dd', 400:'#93a3b3', 500:'#6b7d90', 600:'#4d5d6d', 700:'#33414f', 800:'#16212b', 900:'#0d151d' },
+                            neutral: { 50:'#f7f9fb', 100:'#eef2f6', 200:'#dfe6ec', 300:'#c8d3dd', 400:'#93a3b3', 500:'#6b7d90', 600:'#4d5d6d', 700:'#33414f', 800:'#16212b', 900:'#0d151d' },
+                            stone: { 50:'#f7f9fb', 100:'#eef2f6', 200:'#dfe6ec', 300:'#c8d3dd', 400:'#93a3b3', 500:'#6b7d90', 600:'#4d5d6d', 700:'#33414f', 800:'#16212b', 900:'#0d151d' },
+                            red: { 50:'#fdf0f1', 100:'#fbdbdf', 200:'#f6b7bf', 300:'#ec8b97', 400:'#df5b6b', 500:'#dc2626', 600:'#b91c1c', 700:'#941616', 800:'#761212', 900:'#4c0b0b' },
+                            teal: { 50:'#eef7f5', 100:'#d3ebe6', 200:'#a8d7cf', 300:'#74bdb2', 400:'#3fa296', 500:'#0e9488', 600:'#0b7f75', 700:'#0a6660', 800:'#084f4a', 900:'#063634' },
+                            pink: { 50:'#fdf0f4', 100:'#fbdbe4', 200:'#f6bcd0', 300:'#ec94b4', 400:'#dd6a94', 500:'#c9407a', 600:'#a53060', 700:'#84254d', 800:'#651b3b', 900:'#431226' },
+                            yellow: { 50:'#fdf6ec', 100:'#fae9cd', 200:'#f4d29a', 300:'#eab862', 400:'#dd9a3b', 500:'#b45309', 600:'#92400e', 700:'#78350f', 800:'#5c2a0d', 900:'#3a1b08' }
+                        },
+                        boxShadow: {
+                            xl: '0 1px 2px rgba(16,33,45,.06)',
+                            '2xl': '0 1px 3px rgba(16,33,45,.08)',
+                            lg: '0 1px 2px rgba(16,33,45,.06)',
+                            md: '0 1px 2px rgba(16,33,45,.05)',
+                            inner: 'inset 0 1px 2px rgba(16,33,45,.04)'
+                        },
+                        borderRadius: {
+                            '4xl': '14px', '5xl': '16px'
+                        }
+                    }
+                }
+            };
+        }
+    </script>
     <script src="https://unpkg.com/tweetnacl@1.0.3/nacl-fast.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
@@ -22,6 +68,176 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 
     <style>
+        /* ============ VI ② 北欧清爽 · 设计令牌 ============ */
+        :root{
+            --bg:#f2f5f7; --surf:#ffffff; --surf2:#f7f9fb; --line:#dfe6ec;
+            --txt:#16212b; --sub:#6b7d90; --accent:#0e9488; --accent2:#1d4ed8;
+            --ok:#0f9d58; --warn:#b45309; --danger:#dc2626; --blue:#2563eb;
+            --radius:10px; --shadow:0 1px 2px rgba(16,33,45,.06);
+            --ctl:38px;        /* 下发区控件统一高度 */
+            --ctl-fs:12.5px;
+            --chip-fs:14px;    /* 统计标签字号（定稿 14px） */
+            --mono:'JetBrains Mono',ui-monospace,Consolas,monospace;
+        }
+                /* 换肤作用域：仅 body 带 .kui-skin 时生效。
+           探针大盘有 18 套独立主题（body.className 会被切成 theme2/theme5…），
+           兜底规则若全局生效会把深色主题刷成浅色，故用 .kui-skin 精确限定在后台页面。 */
+        body#main-body.kui-skin{ background:var(--bg) !important; color:var(--txt); }
+
+        /* 首次初始化遮罩：用自有类而非 Tailwind 色板，避免被上方换肤重映射影响 */
+        .kui-setup-layer{ position:fixed; inset:0; z-index:200; background:var(--bg);
+            display:flex; align-items:center; justify-content:center; padding:1rem; overflow-y:auto; }
+        .kui-setup-card{ background:var(--surf); border:1px solid var(--line); border-radius:var(--radius);
+            padding:2.5rem 1.5rem; width:100%; max-width:28rem; margin:2rem 0;
+            box-shadow:0 10px 30px rgba(16,33,45,.08); text-align:center; }
+        .kui-setup-icon{ width:4rem; height:4rem; margin:0 auto 1.5rem; border-radius:var(--radius);
+            background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:1.9rem; }
+        .kui-setup-title{ font-size:1.5rem; font-weight:800; color:var(--txt); margin:0 0 .5rem; }
+        .kui-setup-desc{ font-size:.85rem; color:var(--sub); line-height:1.7; margin:0 0 2rem; }
+        .kui-setup-input{ width:100%; background:var(--surf); border:1px solid var(--line); border-radius:var(--radius);
+            padding:.9rem 1rem; margin-bottom:1rem; color:var(--txt); outline:none; transition:border-color .15s; }
+        .kui-setup-input:focus{ border-color:var(--accent); }
+        .kui-setup-btn{ width:100%; background:var(--accent); color:#fff; padding:1rem; border-radius:var(--radius);
+            font-weight:700; border:none; cursor:pointer; transition:opacity .15s, transform .1s; }
+        .kui-setup-btn:hover:not(:disabled){ opacity:.9; }
+        .kui-setup-btn:active:not(:disabled){ transform:scale(.98); }
+        .kui-setup-btn:disabled{ opacity:.5; cursor:not-allowed; }
+        .kui-setup-err{ margin-top:1rem; font-size:.85rem; color:#e11d48; }
+
+        /* 兜底：Tailwind CDN 的样式在运行时后插入，同特异性会覆盖这里，故一律 !important */
+        body.kui-skin [class*="bg-white"]{ background-color:var(--surf) !important; }
+        body.kui-skin [class*="border-white"]{ border-color:var(--line) !important; }
+        body.kui-skin [class*="backdrop-blur"]{ backdrop-filter:none !important; -webkit-backdrop-filter:none !important; }
+        body.kui-skin [class*="bg-gradient-to"]{ background-image:none !important; background-color:var(--accent) !important; }
+        /* 渐变文字（如站名）若去掉渐变会变透明，单独兜住 */
+        body.kui-skin [class*="bg-clip-text"]{ background-image:none !important; color:var(--accent) !important; -webkit-text-fill-color:var(--accent) !important; }
+        /* :not([class*="shadow-["]) 排除任意值阴影，否则在线状态点的发光光晕
+           （kui-glow-ok-lg 等）会被统一阴影抹掉 */
+        body.kui-skin [class*="shadow-"]:not([class*="shadow-["]):not([class*="kui-glow"]){ box-shadow:var(--shadow) !important; }
+        body.kui-skin [class*="rounded-[2rem]"],body.kui-skin [class*="rounded-[2.5rem]"],body.kui-skin [class*="rounded-[3rem]"],body.kui-skin [class*="rounded-[1.5rem]"],body.kui-skin [class*="rounded-[1.25rem]"],body.kui-skin [class*="rounded-3xl"],body.kui-skin [class*="rounded-4xl"],body.kui-skin [class*="rounded-5xl"]{ border-radius:var(--radius) !important; }
+
+        /* ---------- 订阅范围徽标 ---------- */
+        .kui-scope{ font-size:9.5px; font-weight:900; line-height:1; letter-spacing:.5px;
+                    background:var(--accent); color:#fff; padding:3px 6px; border-radius:5px; display:inline-block; }
+        .kui-btn{ display:inline-flex; align-items:center; gap:6px; height:var(--ctl); padding:0 12px;
+                  border-radius:var(--radius); border:1px solid var(--accent); font:700 11.5px/1 inherit; cursor:pointer; }
+        .kui-btn-all{ background:var(--accent); color:#fff; }
+        .kui-btn-all .kui-scope{ background:rgba(255,255,255,.22); }
+
+        /* ---------- ① 部署三宫格 ---------- */
+        .kui-cell{ border:1px solid var(--line); border-radius:var(--radius); background:var(--surf);
+                   padding:9px 12px; cursor:pointer; display:flex; flex-direction:column; justify-content:center;
+                   min-width:0; transition:.15s; box-shadow:var(--shadow); }
+        .kui-cell:hover{ border-color:var(--accent); }
+        .kui-cell-cmd{ background:var(--surf2); }
+
+        /* ---------- ② 下发区 L3 横条 ---------- */
+        .kui-row{ display:flex; flex-wrap:wrap; gap:8px; align-items:stretch; padding:8px 0;
+                  border-bottom:1px dashed var(--line); }
+        .kui-row:last-of-type{ border-bottom:0; }
+        .kui-rowtag{ display:inline-flex; align-items:center; height:var(--ctl); padding:0 10px; white-space:nowrap;
+                     border:1px solid var(--line); border-radius:var(--radius); background:var(--surf2);
+                     font:800 11px/1 inherit; color:var(--txt); }
+        .kui-rowtag small{ font:700 9.5px/1 var(--mono); color:var(--sub); margin-left:5px; }
+        .kui-ctl{ height:var(--ctl) !important; padding:0 11px !important; box-sizing:border-box;
+                  border-radius:var(--radius) !important; font:700 var(--ctl-fs)/1 var(--mono) !important;
+                  background:var(--surf2); border:1px solid var(--line); color:var(--txt); outline:none; }
+        .kui-ctl:focus{ border-color:var(--accent); }
+        .kui-ctl[type=date]{ font-size:12px; }
+        .kui-fire{ background:var(--accent); border-color:var(--accent); color:#fff; cursor:pointer;
+                   display:inline-flex; align-items:center; justify-content:center; gap:6px; white-space:nowrap; }
+        .kui-fire:hover{ opacity:.9; }
+        .kui-w-user{flex:0 0 178px} .kui-w-owner{flex:0 0 134px} .kui-w-proto{flex:0 0 150px}
+        .kui-w-port{flex:0 0 70px} .kui-w-num{flex:0 0 74px} .kui-w-date{flex:0 0 140px}
+        .kui-w-sni{flex:1 1 150px;min-width:130px}
+        /* flex item 的 min-width 默认是 auto，会被 <input> 的固有 size（约20字符）撑住，
+           使 flex-basis 失效——实测 basis 70px 却渲染成 172px。必须显式清零。 */
+        .kui-ctl{ min-width:0; }
+
+        /* ---------- 在线状态点发光 ----------
+           Tailwind CDN 对 shadow-[...] 任意值类生成不可靠（实测 computed:none），
+           故改为语义化类在此统一定义。 */
+        .kui-glow{ box-shadow:0 0 5px currentColor; }
+        .kui-glow-ok{ box-shadow:0 0 5px rgba(16,185,129,.5); }
+        .kui-glow-bad{ box-shadow:0 0 5px rgba(244,63,94,.5); }
+        .kui-glow-warn{ box-shadow:0 0 5px rgba(245,158,11,.5); }
+        .kui-glow-ok-lg{ box-shadow:0 0 8px rgba(16,185,129,.8); }
+        .kui-glow-bad-lg{ box-shadow:0 0 8px rgba(251,113,133,.8); }
+        .kui-glow-warn-lg{ box-shadow:0 0 8px rgba(251,191,36,.8); }
+
+        /* ---------- 用户与授权页 ---------- */
+        .kui-panel{ background:var(--surf); border:1px solid var(--line); border-radius:10px;
+                    padding:24px; box-shadow:0 1px 2px rgba(16,33,45,.06); }
+        .kui-note{ background:var(--surf); border:1px solid var(--line); border-left:3px solid #0e9488;
+                   border-radius:8px; padding:12px 16px; font-size:12.5px; color:var(--sub); line-height:1.7; }
+        .kui-note b{ color:#0f766e; }
+        .kui-note code{ background:rgba(14,148,136,.1); color:#0f766e; padding:1px 5px; border-radius:4px;
+                        font-family:ui-monospace,monospace; font-size:11.5px; }
+        .kui-empty{ padding:48px 0; text-align:center; color:var(--muted); font-size:13px;
+                    border:2px dashed var(--line); border-radius:10px; }
+        .kui-lbl{ display:block; font-size:11.5px; font-weight:700; color:var(--muted); margin-bottom:8px; padding-left:8px; }
+        .kui-token{ flex:1; min-width:0; background:var(--bg); border:1px solid var(--line); border-radius:8px;
+                    padding:7px 10px; font-family:ui-monospace,monospace; font-size:11.5px; color:var(--muted); }
+        .kui-mini{ background:var(--surf); border:1px solid var(--line); border-radius:8px; padding:7px 12px;
+                   font-size:11.5px; font-weight:700; color:var(--text); transition:all .15s; white-space:nowrap; }
+        .kui-mini:hover{ border-color:#0e9488; color:#0f766e; }
+        .kui-mini-owner{ background:rgba(14,148,136,.08); border-color:rgba(14,148,136,.25); color:#0f766e; }
+        .kui-mini-danger{ color:#be123c; }
+        .kui-mini-danger:hover{ border-color:#f43f5e; background:rgba(244,63,94,.07); color:#9f1239; }
+        .kui-tag-rose{ display:inline-block; background:rgba(244,63,94,.1); color:#be123c;
+                       padding:3px 9px; border-radius:6px; font-size:10.5px; font-weight:700; }
+        .kui-tag-emerald{ display:inline-block; background:rgba(16,185,129,.12); color:#047857;
+                          padding:3px 9px; border-radius:6px; font-size:10.5px; font-weight:700; }
+        /* 一键热踢开关：关掉=停用，VPS 侧 iptables 立刻封端口 */
+        .kui-switch{ display:inline-flex; align-items:center; gap:8px; cursor:pointer; user-select:none; }
+        .kui-switch input{ display:none; }
+        .kui-switch-track{ width:42px; height:24px; border-radius:12px; background:rgba(16,185,129,.85);
+                           position:relative; transition:background .2s; flex-shrink:0; }
+        .kui-switch.is-off .kui-switch-track{ background:rgba(148,163,184,.55); }
+        .kui-switch-thumb{ position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%;
+                           background:#fff; transition:transform .2s; box-shadow:0 1px 3px rgba(0,0,0,.2); }
+        .kui-switch.is-off .kui-switch-thumb{ transform:translateX(18px); }
+        .kui-switch-text{ font-size:11.5px; font-weight:700; color:var(--muted); min-width:28px; }
+        /* 节点授权勾选区 */
+        .kui-nodes-picker{ display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+                           gap:8px; max-height:260px; overflow-y:auto; }
+        .kui-pick-group{ margin-bottom:14px; }
+        .kui-pick-group:last-child{ margin-bottom:0; }
+        .kui-pick-grouphead{ display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
+        .kui-pick-grouptitle{ font-size:12px; font-weight:800; color:var(--txt); }
+        .kui-pick-grouptitle small{ font-weight:600; color:var(--sub); margin-left:7px; }
+        .kui-pick-vps{ background:rgba(14,148,136,.06); border-color:rgba(14,148,136,.22); font-weight:800; color:#0f766e; }
+        .kui-pick input[type=checkbox]{ width:15px; height:15px; accent-color:#0e9488; flex:0 0 auto; cursor:pointer; }
+        .kui-pick{ display:flex; align-items:center; gap:8px; padding:9px 12px; border:1px solid var(--line);
+                   border-radius:8px; font-size:12px; cursor:pointer; transition:all .15s; }
+        .kui-pick:hover{ border-color:#0e9488; background:rgba(14,148,136,.04); }
+        .kui-utable{ width:100%; border-collapse:collapse; font-size:12.5px; }
+        .kui-utable th{ text-align:left; padding:12px 16px; font-size:11px; font-weight:800; color:var(--muted);
+                         letter-spacing:.04em; border-bottom:1px solid var(--line); white-space:nowrap; }
+        .kui-utable td{ padding:12px 16px; border-bottom:1px solid var(--line); vertical-align:middle; }
+        .kui-utable tbody tr:last-child td{ border-bottom:none; }
+        .kui-utable tbody tr:hover{ background:rgba(14,148,136,.03); }
+
+        /* ---------- 步骤编号 ---------- */
+        .kui-step{ display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px;
+                   border-radius:50%; background:var(--accent); color:#fff; font-size:9.5px; font-weight:900; }
+
+        /* ---------- 节点网格列数（Vue 动态生成的类，Tailwind CDN 的 JIT 扫描可能滞后） ---------- */
+        .kui-nodes{ display:grid; gap:12px; grid-template-columns:repeat(2,minmax(0,1fr)); }
+        @media (min-width:768px){ .kui-nodes{ grid-template-columns:repeat(4,minmax(0,1fr)); } }
+        @media (min-width:1400px){ .kui-nodes{ grid-template-columns:repeat(6,minmax(0,1fr)); } }
+
+        /* ---------- mini 7 天柱图（柱高与统计字号对齐） ---------- */
+        .kui-spark{ display:inline-flex; align-items:flex-end; gap:2px; height:var(--chip-fs); line-height:1; }
+        .kui-spark i{ width:3px; min-height:2px; background:var(--sub); border-radius:1px; display:block; opacity:.5; }
+        .kui-spark i.hi{ background:var(--accent); opacity:1; }
+
+        /* ---------- 菜单栏：等宽（按实际 tab 数量自动均分） ---------- */
+        @media (min-width: 1000px){
+            .kui-tabs{ display:grid !important; grid-auto-flow:column !important;
+                       grid-auto-columns:minmax(0,1fr) !important; gap:6px !important; }
+            .kui-tabs > button{ width:100% !important; text-align:center !important; padding-left:6px !important; padding-right:6px !important; }
+        }
         [v-cloak] { display: none !important; }
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -169,17 +385,31 @@
         }
     </style>
 </head>
-<body id="main-body" class="theme1">
+<body id="main-body" class="kui-skin">
     
-    <div id="app" v-cloak>
-        <div v-if="!isLoggedIn || activeTab === 'probe'" class="probe-body">
+<div id="app" v-cloak>
+            <!-- 首次初始化：仓库不再预置任何默认账密，新部署必须先在这里自建管理员 -->
+            <div v-if="setupRequired" class="kui-setup-layer">
+                <div class="kui-setup-card">
+                    <div class="kui-setup-icon">🛠</div>
+                    <h2 class="kui-setup-title">初始化管理员</h2>
+                    <p class="kui-setup-desc">本实例尚未初始化。请设置管理员账号，设置完成后自动登录。<br class="hidden sm:block">用户名<b>不能是 admin</b>（该名字被订阅逻辑保留）。</p>
+                    <input v-model="setupUser" placeholder="管理员用户名（字母/数字/点/横线/下划线）" class="kui-setup-input">
+                    <input v-model="setupPass" type="password" placeholder="密码（至少 12 位）" class="kui-setup-input">
+                    <input v-model="setupConfirm" type="password" placeholder="再输一次密码" @keyup.enter="runSetup" class="kui-setup-input">
+                    <button @click="runSetup" :disabled="setupBusy" class="kui-setup-btn">{{ setupBusy ? '正在初始化…' : '完成初始化并登录' }}</button>
+                    <p v-if="setupError" class="kui-setup-err">{{ setupError }}</p>
+                </div>
+            </div>
+
+            <div v-if="!isLoggedIn || activeTab === 'probe'" class="probe-body">
             
             <div v-if="showLoginModal" class="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
                 <div class="bg-white/80 backdrop-blur-xl border border-white p-6 sm:p-10 rounded-[2rem] shadow-2xl w-full max-w-sm relative">
                     <button @click="showLoginModal = false" class="absolute top-4 right-5 text-2xl text-slate-400 hover:text-slate-600">&times;</button>
                     <div class="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl mx-auto mb-6 shadow-lg flex items-center justify-center"><span class="text-white text-3xl">✨</span></div>
                     <h2 class="text-3xl font-black mb-8 text-center bg-clip-text text-transparent bg-gradient-to-r from-slate-800 to-slate-600">系统准入</h2>
-                    <input v-model="loginUser" placeholder="用户名 (默认 admin)" class="w-full bg-white/50 border border-white p-4 rounded-2xl mb-4 focus:bg-white transition-all text-slate-700">
+                    <input v-model="loginUser" placeholder="用户名" class="w-full bg-white/50 border border-white p-4 rounded-2xl mb-4 focus:bg-white transition-all text-slate-700">
                     <input v-model="password" type="password" placeholder="请输入密码" @keyup.enter="login" class="w-full bg-white/50 border border-white p-4 rounded-2xl mb-8 focus:bg-white transition-all text-slate-700">
                     <button @click="login" class="w-full bg-gradient-to-r from-slate-800 to-black text-white p-4 rounded-2xl font-bold shadow-lg hover:scale-[1.02] active:scale-95 transition-all">登 入 系统</button>
                 </div>
@@ -363,7 +593,7 @@
             </div>
         </div>
 
-        <div v-if="isLoggedIn && activeTab !== 'probe'" class="max-w-6xl mx-auto space-y-8 animate-fade-in p-4 md:p-8">
+        <div v-if="isLoggedIn && activeTab !== 'probe'" class="max-w-[1800px] mx-auto space-y-8 animate-fade-in p-4 md:p-8">
             
             <div class="bg-white/70 backdrop-blur-xl border border-white/80 p-4 md:px-6 rounded-[2rem] shadow-xl shadow-slate-200/50 flex flex-col lg:flex-row justify-between items-center sticky top-4 z-50 gap-4">
                 <div class="flex flex-wrap justify-center lg:justify-start items-center gap-3 md:gap-4 w-full lg:w-auto">
@@ -375,16 +605,16 @@
                 </div>
                 <div class="flex flex-wrap justify-center lg:justify-end items-center gap-2 w-full lg:w-auto">
                     <span class="text-[10px] md:text-xs font-bold text-emerald-500 bg-emerald-100/50 px-3 py-2 rounded-full border border-emerald-200 animate-pulse">🟢 实时监控中</span>
-                    <button v-if="role === 'admin'" @click="copyCommand(generateSubLink('', ''), '全量普通订阅已复制！')" class="bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-4 py-2 rounded-full text-xs font-bold shadow-md hover:scale-105 active:scale-95 transition-all">🔗 普通订阅</button>
-                    <button v-if="role === 'admin'" @click="copyCommand(generateSubLink('', 'clash'), '全量Clash订阅已复制！')" class="bg-gradient-to-r from-orange-500 to-red-500 text-white px-4 py-2 rounded-full text-xs font-bold shadow-md hover:scale-105 active:scale-95 transition-all">🔗 Clash订阅</button>
-                    <button v-if="role === 'admin'" @click="showQrCode(generateSubLink('', ''))" class="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-4 py-2 rounded-full text-xs font-bold shadow-md hover:scale-105 active:scale-95 transition-all">📱 二维码</button>
-                    <button @click="refreshData" class="bg-white/50 hover:bg-white/80 border border-slate-200 px-4 py-2 rounded-full text-xs font-medium transition-all shadow-sm">🔄 刷新</button>
-                    <button @click="logout" class="text-rose-500 hover:bg-rose-50 px-4 py-2 rounded-full text-xs font-bold transition-all border border-transparent hover:border-rose-200">退出</button>
+                    <button v-if="role === 'admin'" @click="copyCommand(generateSubLink('', ''), '全站普通订阅已复制！（含所有 VPS 节点）')" title="不含 ip 参数 → 含全部 VPS 的节点" class="kui-btn kui-btn-all"><span class="kui-scope">全站</span>🔗 全站普通订阅</button>
+                    <button v-if="role === 'admin'" @click="copyCommand(generateSubLink('', 'clash'), '全站 Clash 订阅已复制！（含所有 VPS 节点）')" title="不含 ip 参数 → 含全部 VPS 的节点" class="kui-btn kui-btn-all"><span class="kui-scope">全站</span>🔗 全站 Clash 订阅</button>
+                    <button v-if="role === 'admin'" @click="showQrCode(generateSubLink('', ''))" title="全站订阅二维码" class="kui-btn kui-btn-all"><span class="kui-scope">全站</span>📱 二维码</button>
+                    <button @click="refreshData" class="kui-btn kui-btn-sec">🔄 刷新</button>
+                    <button @click="logout" class="kui-btn kui-btn-sec kui-btn-danger">退出</button>
                 </div>
             </div>
 
             <div class="flex justify-center mb-4 px-2">
-                <div class="kui-tab-strip w-full max-w-full overflow-x-auto bg-slate-200/50 p-1.5 rounded-full flex flex-nowrap justify-start lg:justify-center gap-1 backdrop-blur-sm border border-white/50 shadow-inner">
+                <div class="kui-tab-strip kui-tabs w-full max-w-full overflow-x-auto bg-slate-200/50 p-1.5 rounded-full flex flex-nowrap justify-start lg:justify-center gap-1 backdrop-blur-sm border border-white/50 shadow-inner">
                     <template v-if="role === 'admin'">
                         <button @click="activeTab = 'nodes'" :class="activeTab === 'nodes' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'" class="kui-tab-button kui-admin-tab shrink-0 whitespace-nowrap px-2 sm:px-3 lg:px-4 py-2 sm:py-2.5 rounded-full font-bold transition-all text-[11px] sm:text-xs lg:text-sm">服务器与节点</button>
                         <button @click="activeTab = 'users'" :class="activeTab === 'users' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'" class="kui-tab-button kui-admin-tab shrink-0 whitespace-nowrap px-2 sm:px-3 lg:px-4 py-2 sm:py-2.5 rounded-full font-bold transition-all text-[11px] sm:text-xs lg:text-sm">用户与授权</button>
@@ -393,7 +623,7 @@
                         <button @click="activeTab = 'services'" :class="activeTab === 'services' ? 'bg-white text-violet-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'" class="kui-tab-button kui-admin-tab shrink-0 whitespace-nowrap px-2 sm:px-3 lg:px-4 py-2 sm:py-2.5 rounded-full font-bold transition-all text-[11px] sm:text-xs lg:text-sm">🧩 第三方服务</button>
                         <button @click="activeTab = 'thirdparty'" :class="activeTab === 'thirdparty' ? 'bg-white text-orange-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'" class="kui-tab-button kui-admin-tab shrink-0 whitespace-nowrap px-2 sm:px-3 lg:px-4 py-2 sm:py-2.5 rounded-full font-bold transition-all text-[11px] sm:text-xs lg:text-sm">🔗 第三方订阅</button>
                         <button @click="activeTab = 'settings'" :class="activeTab === 'settings' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'" class="kui-tab-button kui-admin-tab shrink-0 whitespace-nowrap px-2 sm:px-3 lg:px-4 py-2 sm:py-2.5 rounded-full font-bold transition-all text-[11px] sm:text-xs lg:text-sm">⚙️ 系统设置</button>
-                        <button @click="activeTab = 'probe'; probeDetailId = null;" class="kui-tab-button kui-admin-tab shrink-0 whitespace-nowrap px-2 sm:px-3 lg:px-4 py-2 sm:py-2.5 rounded-full font-bold transition-all text-[11px] sm:text-xs lg:text-sm text-emerald-600 hover:bg-emerald-50 shadow-sm border border-transparent hover:border-emerald-200">🌐 探针全景大盘</button>
+                        <button @click="activeTab = 'probe'; probeDetailId = null;" :class="activeTab === 'probe' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'" class="kui-tab-button kui-admin-tab shrink-0 whitespace-nowrap px-2 sm:px-3 lg:px-4 py-2 sm:py-2.5 rounded-full font-bold transition-all text-[11px] sm:text-xs lg:text-sm">探针全景</button>
                     </template>
                     <template v-if="role === 'user'">
                         <button @click="activeTab = 'dashboard'" :class="activeTab === 'dashboard' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'" class="px-6 md:px-8 py-2.5 rounded-full font-bold transition-all text-sm md:text-base">我的主页</button>
@@ -415,60 +645,96 @@
                     <div class="flex-1"><label class="block text-xs font-bold text-slate-400 mb-2 pl-2">服务器别名</label><input v-model="newVps.name" placeholder="例如: 日本软银 01" class="w-full bg-white/50 border border-white p-3 rounded-2xl transition hover:bg-white focus:bg-white"></div>
                     <div class="flex-1"><label class="block text-xs font-bold text-slate-400 mb-2 pl-2">公网 IP</label><input v-model="newVps.ip" placeholder="8.8.8.8" class="w-full bg-white/50 border border-white p-3 rounded-2xl transition hover:bg-white focus:bg-white"></div>
                     <div class="w-full md:w-48"><label class="block text-xs font-bold text-slate-400 mb-2 pl-2">系统架构</label><select v-model="newVps.os" class="w-full bg-white/50 border border-white p-3 rounded-2xl transition hover:bg-white focus:bg-white outline-none font-medium text-slate-700"><option value="debian">Ubuntu / Debian</option><option value="alpine">Alpine Linux</option></select></div>
-                    <button @click="addVps" class="bg-slate-800 text-white px-8 py-3.5 rounded-2xl font-bold hover:bg-black transition-all shadow-lg hover:scale-105 whitespace-nowrap">接入机器</button>
+                    <button @click="addVps" class="kui-ctl kui-fire !px-8 whitespace-nowrap !shadow-none hover:scale-105 transition-all">接入机器</button>
                 </div>
 
-                <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                <div class="grid grid-cols-1 gap-6">
                     <div v-for="vps in servers" :key="vps.ip" class="bg-white/70 backdrop-blur-xl rounded-[2rem] border border-white shadow-xl shadow-slate-200/40 flex flex-col overflow-hidden transition-all hover:shadow-2xl">
                         <div class="p-6 md:p-8 relative">
-                            <div class="flex justify-between items-start mb-4">
-                                <div>
-                                    <h3 class="font-black text-2xl text-slate-800 flex items-center gap-2 mb-1">{{ vps.name }}<span :class="vps.realtime_state === 'stale' ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]' : (isOnline(vps.last_report, vps.realtime_state) ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-rose-400 shadow-[0_0_8px_rgba(251,113,133,0.8)]')" class="w-3 h-3 rounded-full inline-block"></span></h3>
-                                    <p class="text-sm font-mono text-slate-400 font-medium">{{ vps.ip }}</p>
+                            <div class="flex justify-between items-start mb-4 gap-3">
+                                <div class="flex flex-wrap items-center gap-x-5 gap-y-2 min-w-0">
+                                    <div class="shrink-0">
+                                        <h3 class="font-black text-2xl text-slate-800 flex items-center gap-2 mb-1">{{ vps.name }}<span :class="vps.realtime_state === 'stale' ? 'bg-amber-400 kui-glow-warn-lg' : (isOnline(vps.last_report, vps.realtime_state) ? 'bg-emerald-400 kui-glow-ok-lg' : 'bg-rose-400 kui-glow-bad-lg')" class="w-3 h-3 rounded-full inline-block"></span></h3>
+                                        <p class="text-sm font-mono text-slate-400 font-medium">{{ vps.ip }}</p>
+                                    </div>
+                                    <div class="flex flex-wrap gap-2 text-[14px] font-mono font-bold min-w-0 items-center">
+                                        <span class="bg-white/70 border border-white px-3 py-1 rounded-lg text-slate-600 shadow-sm">CPU {{ vps.cpu || 0 }}%</span>
+                                        <span class="bg-white/70 border border-white px-3 py-1 rounded-lg text-slate-600 shadow-sm">MEM {{ vps.mem || 0 }}%</span>
+                                        <span class="bg-white/70 border border-white px-3 py-1 rounded-lg text-slate-600 shadow-sm">DISK {{ vps.disk || 0 }}%</span>
+                                        <span class="bg-white/70 border border-white px-3 py-1 rounded-lg text-slate-600 shadow-sm">LOAD {{ vps.load || '0.00' }}</span>
+                                        <span class="bg-white/70 border border-white px-3 py-1 rounded-lg shadow-sm"><span class="text-emerald-500">↓ {{ formatBytes(vps.net_in_speed || 0) }}/s</span> <span class="text-blue-500">↑ {{ formatBytes(vps.net_out_speed || 0) }}/s</span></span>
+                                        <span class="bg-white/70 border border-white px-3 py-1 rounded-lg text-slate-400 shadow-sm">UP {{ vps.uptime || 'N/A' }}</span>
+                                        <span class="bg-white/70 border border-white px-3 py-1 rounded-lg shadow-sm inline-flex items-center gap-1.5" :title="sparkTitle(vps.ip)"><span class="text-slate-400">7D</span><span class="kui-spark"><i v-for="bar in sparkBars(vps.ip)" :key="bar.i" :class="bar.isMax ? 'hi' : ''" :style="{ height: bar.px + 'px' }" :title="bar.title"></i></span></span>
+                                    </div>
                                 </div>
-                                <button @click="deleteVps(vps.ip)" class="text-slate-300 hover:text-rose-500 font-bold transition-all">彻底移除</button>
+                                <button @click="deleteVps(vps.ip)" class="text-slate-300 hover:text-rose-500 font-bold transition-all shrink-0">彻底移除</button>
                             </div>
-                            <div class="flex justify-between text-[10px] text-slate-400 font-mono font-black mb-4 px-1 uppercase tracking-wider"><span>UP: {{ vps.uptime || 'N/A' }}</span><span>LOAD: {{ vps.load || '0.00' }}</span></div>
-                            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-6">
-                                <div class="bg-white/50 p-3 rounded-2xl border border-white shadow-sm flex flex-col justify-between"><div class="text-[9px] text-slate-400 font-bold tracking-wider mb-1">CPU</div><div class="font-black text-lg text-slate-700">{{ vps.cpu || 0 }}%</div><div class="w-full bg-slate-200/50 rounded-full h-1 mt-1 overflow-hidden"><div class="bg-indigo-400 h-1 rounded-full" :style="{ width: (vps.cpu || 0) + '%' }"></div></div></div>
-                                <div class="bg-white/50 p-3 rounded-2xl border border-white shadow-sm flex flex-col justify-between"><div class="text-[9px] text-slate-400 font-bold tracking-wider mb-1">MEM</div><div class="font-black text-lg text-slate-700">{{ vps.mem || 0 }}%</div><div class="w-full bg-slate-200/50 rounded-full h-1 mt-1 overflow-hidden"><div class="bg-purple-400 h-1 rounded-full" :style="{ width: (vps.mem || 0) + '%' }"></div></div></div>
-                                <div class="bg-white/50 p-3 rounded-2xl border border-white shadow-sm flex flex-col justify-between"><div class="text-[9px] text-slate-400 font-bold tracking-wider mb-1">DISK</div><div class="font-black text-lg text-slate-700">{{ vps.disk || 0 }}%</div><div class="w-full bg-slate-200/50 rounded-full h-1 mt-1 overflow-hidden"><div class="bg-emerald-400 h-1 rounded-full" :style="{ width: (vps.disk || 0) + '%' }"></div></div></div>
-                                <div class="bg-white/50 p-2 rounded-2xl border border-white shadow-sm flex flex-col justify-center text-center"><div class="text-[9px] text-slate-400 font-bold tracking-wider mb-1">SPEED</div><div class="text-[10px] font-black text-emerald-500 truncate">↓ {{ formatBytes(vps.net_in_speed || 0) }}/s</div><div class="text-[10px] font-black text-blue-500 truncate mt-0.5">↑ {{ formatBytes(vps.net_out_speed || 0) }}/s</div></div>
+                            <!-- 7 天流量已并入上方统计标签行的 mini 柱图 -->
+                        </div>
+
+                        <!-- ① 部署 AGENT 与订阅（此机）：命令占 1/2 宽 -->
+                        <div class="px-6 md:px-8 pb-5">
+                            <div class="text-[10px] font-black tracking-wider mb-2 flex flex-wrap items-center gap-2">
+                                <span class="kui-step">①</span> 部署 AGENT 与订阅
+                                <span class="kui-scope">此机</span>
+                                <span class="font-medium normal-case tracking-normal" style="color:var(--sub)">下列订阅仅含 {{ vps.ip }} 的节点</span>
                             </div>
-                            <div class="bg-white/40 p-4 rounded-2xl border border-white"><div class="text-[10px] text-slate-400 font-bold tracking-wider mb-2">7-DAY TRAFFIC TREND</div><div :id="'chart-' + vps.ip" class="w-full h-32"></div></div>
+                            <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                                <div class="md:col-span-2 kui-cell kui-cell-cmd" @click="copyCommand(generateCmd(vps.ip), '部署指令已复制！')">
+                                    <div class="flex justify-between items-center mb-1.5">
+                                        <span class="text-[9.5px] font-black tracking-wider" style="color:var(--sub)">部署命令 · FULL DEPLOY</span>
+                                        <span class="flex gap-2 text-[9px] font-bold" style="color:var(--sub)" @click.stop>
+                                            <label class="cursor-pointer inline-flex items-center gap-1"><input type="radio" v-model="deployOsMap[vps.ip]" @change="saveOsMap" value="debian"> Ubuntu/Debian</label>
+                                            <label class="cursor-pointer inline-flex items-center gap-1"><input type="radio" v-model="deployOsMap[vps.ip]" @change="saveOsMap" value="alpine"> Alpine</label>
+                                        </span>
+                                    </div>
+                                    <div class="font-mono text-[11px] truncate" :title="generateCmd(vps.ip)" style="color:var(--accent)">📋 {{ generateCmd(vps.ip) }}</div>
+                                </div>
+                                <div class="kui-cell" @click="copyCommand(generateSubLink(vps.ip, ''), '此机普通订阅已复制！')">
+                                    <div class="flex justify-between items-center mb-1.5">
+                                        <span class="text-[9.5px] font-black tracking-wider flex items-center gap-1.5" style="color:var(--sub)"><span class="kui-scope">此机</span> 普通订阅</span>
+                                        <span>🔗</span>
+                                    </div>
+                                    <div class="text-[11.5px] font-bold" style="color:var(--accent)">复制此机普通订阅</div>
+                                    <div class="font-mono text-[10px] truncate mt-1" style="color:var(--sub)">…&amp;token=••••&amp;ip={{ vps.ip }}</div>
+                                </div>
+                                <div class="kui-cell" @click="copyCommand(generateSubLink(vps.ip, 'clash'), '此机 Clash 订阅已复制！')">
+                                    <div class="flex justify-between items-center mb-1.5">
+                                        <span class="text-[9.5px] font-black tracking-wider flex items-center gap-1.5" style="color:var(--sub)"><span class="kui-scope">此机</span> Clash 订阅</span>
+                                        <span>🔗</span>
+                                    </div>
+                                    <div class="text-[11.5px] font-bold" style="color:var(--accent)">复制此机 Clash 订阅</div>
+                                    <div class="font-mono text-[10px] truncate mt-1" style="color:var(--sub)">…&amp;format=clash&amp;ip={{ vps.ip }}</div>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="px-6 md:px-8 pb-4">
-                            <div class="bg-indigo-50/70 border-2 border-dashed border-indigo-200 p-6 rounded-[1.5rem] mb-2 relative overflow-hidden group shadow-sm hover:border-indigo-300 transition-all">
-                                <div class="absolute top-0 right-0 bg-indigo-500 text-white text-[10px] font-black px-3 py-1 rounded-bl-xl shadow-sm">QUICK INSTALL</div>
-                                <h4 class="font-black text-indigo-800 text-lg mb-2 flex items-center gap-2">🚀 极速全量节点下发 (8合1)</h4>
-                                <p class="text-xs text-indigo-500/80 font-bold mb-5 leading-relaxed">输入起始端口，系统将依次为您生成 8 个稳定防封协议阵列：XTLS+Reality, Hysteria2, TUIC, Trojan, H2+Reality, gRPC+Reality, AnyTLS, Naive。</p>
-                                <div class="flex flex-col md:flex-row gap-4 mb-2">
-                                    <div class="flex-1"><label class="block text-[10px] text-indigo-400 font-bold mb-1 pl-1">归属用户设置</label><select v-model="batchUser[vps.ip]" class="w-full bg-white border border-indigo-100 text-indigo-700 font-bold text-sm p-3.5 rounded-xl outline-none focus:shadow-md transition"><option value="admin">👤 管理员自身</option><option v-for="u in users" :value="u.username">👤 {{ u.username }}</option></select></div>
-                                    <div class="flex-1"><label class="block text-[10px] text-indigo-400 font-bold mb-1 pl-1">起始端口 (建议 8881)</label><input v-model="batchStartPort[vps.ip]" type="number" placeholder="例如: 8881" class="w-full bg-white border border-indigo-100 p-3.5 rounded-xl outline-none text-sm font-mono text-indigo-900 focus:shadow-md transition"></div>
-                                    <div class="flex items-end"><button @click="deployAllProtocols(vps.ip)" class="h-[50px] bg-gradient-to-r from-indigo-500 to-blue-600 text-white px-8 rounded-xl text-sm font-black shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 transition-all whitespace-nowrap">🚀 爆发下发</button></div>
-                                </div>
+                            <!-- ② 下发节点（L3 上下横条，控件统一 38px 等高） -->
+                            <div class="text-[10px] font-black tracking-wider mb-2 flex items-center gap-2"><span class="kui-step">②</span> 下发节点</div>
+                            <div class="kui-row">
+                                <span class="kui-rowtag">极速全量下发<small>8 IN 1</small></span>
+                                <select v-model="batchUser[vps.ip]" class="kui-ctl kui-w-user" title="归属用户"><option :value="currentUser">👤 管理员自身({{ currentUser }})</option><option v-for="u in users" :value="u.username">👤 {{ u.username }}</option></select>
+                                <input v-model="batchStartPort[vps.ip]" type="number" placeholder="起始端口" title="起始端口" class="kui-ctl kui-w-port">
+                                <button @click="deployAllProtocols(vps.ip)" class="kui-ctl kui-fire">🚀 极速下发 8 个协议</button>
                             </div>
-
-                            <div class="bg-gradient-to-br from-white/80 to-white/40 p-5 rounded-[1.5rem] border border-white shadow-sm mt-4">
-                                <div class="text-xs font-bold text-slate-400 mb-2 pl-1">手动单节点精细化下发</div>
-                                <select v-model="newNodeParams[vps.ip].username" class="w-full border-none bg-indigo-50/50 text-indigo-700 font-bold text-sm p-3 rounded-xl outline-none mb-3"><option value="admin">👤 归属权: 管理员自身</option><option v-for="u in users" :value="u.username">👤 归属权: {{ u.username }}</option></select>
-                                <div class="flex gap-3 mb-3">
-                                    <select v-model="newNodeParams[vps.ip].protocol" class="border-none bg-slate-100/50 text-slate-700 text-sm p-3 rounded-xl flex-1 outline-none font-medium"><option value="XTLS-Reality">XTLS + Reality</option><option value="Hysteria2">Hysteria2 (极速)</option><option value="TUIC">TUIC v5 (高并发)</option><option value="Trojan">Trojan</option><option value="H2-Reality">H2 + Reality</option><option value="gRPC-Reality">gRPC + Reality</option><option value="AnyTLS">AnyTLS</option><option value="Naive">Naive</option><option disabled>──────────</option><option value="VLESS-Argo">VLESS Argo (IP被封)</option><option value="dokodemo-door">Dokodemo (内部转发)</option></select>
-                                    <input v-model="newNodeParams[vps.ip].port" type="number" placeholder="端口" class="bg-slate-100/50 text-slate-700 text-sm p-3 rounded-xl w-24 outline-none font-mono">
-                                </div>
-                                <div class="grid grid-cols-2 gap-3 mb-3">
-                                    <div class="bg-slate-100/50 p-3 rounded-xl"><label class="block text-[10px] text-slate-400 font-bold mb-1">配额(GB, 0无限)</label><input v-model="newNodeParams[vps.ip].traffic_limit_gb" type="number" class="w-full text-sm bg-transparent outline-none font-bold text-slate-700"></div>
-                                    <div class="bg-slate-100/50 p-3 rounded-xl"><label class="block text-[10px] text-slate-400 font-bold mb-1">到期日(留空永久)</label><input v-model="newNodeParams[vps.ip].expire_date" type="date" class="w-full text-sm bg-transparent outline-none font-bold text-slate-700"></div>
-                                </div>
-                                <div v-if="['XTLS-Reality', 'H2-Reality', 'gRPC-Reality'].includes(newNodeParams[vps.ip].protocol)" class="bg-slate-100/50 p-3 rounded-xl mb-3"><input v-model="newNodeParams[vps.ip].sni" :list="'sni-rec-' + vps.ip" placeholder="伪装域名: 支持手填或下拉" class="w-full bg-transparent outline-none text-sm font-medium text-slate-700"><datalist :id="'sni-rec-' + vps.ip"><option value="addons.mozilla.org"></option><option value="www.apple.com"></option><option value="gateway.icloud.com"></option><option value="itunes.apple.com"></option><option value="www.microsoft.com"></option></datalist></div>
-                                <div v-if="['TUIC', 'Hysteria2', 'Trojan', 'AnyTLS', 'Naive'].includes(newNodeParams[vps.ip].protocol)" class="bg-slate-100/50 p-3 rounded-xl mb-3"><input v-model="newNodeParams[vps.ip].sni" placeholder="SNI 域名 / 主机名" class="w-full bg-transparent outline-none text-sm font-medium text-slate-700"></div>
-                                <div v-if="newNodeParams[vps.ip].protocol === 'dokodemo-door'" class="bg-slate-100/50 p-3 rounded-xl mb-3 space-y-2">
-                                    <select v-model="newNodeParams[vps.ip].relay_type" class="w-full bg-white p-2 rounded-lg text-sm"><option value="external">外部目标地址</option><option value="internal">面板内部节点</option></select>
-                                    <div v-if="newNodeParams[vps.ip].relay_type === 'external'" class="grid grid-cols-2 gap-2"><input v-model="newNodeParams[vps.ip].target_ip" placeholder="目标 IP/域名" class="bg-white p-2 rounded-lg text-sm"><input v-model.number="newNodeParams[vps.ip].target_port" type="number" placeholder="目标端口" class="bg-white p-2 rounded-lg text-sm"></div>
-                                    <select v-else v-model="newNodeParams[vps.ip].target_id" class="w-full bg-white p-2 rounded-lg text-sm"><option value="">选择目标节点</option><option v-for="target in nodes.filter(n => n.id && n.protocol !== 'dokodemo-door')" :value="target.id">{{ getVpsName(target.vps_ip) }} · {{ target.protocol }}:{{ target.port }}</option></select>
-                                </div>
-                                <button @click="addNode(vps.ip)" class="w-full bg-gradient-to-r from-slate-800 to-black text-white py-3 rounded-xl font-bold shadow-lg transition-all hover:scale-[1.02]">添加单节点</button>
+                            <div class="kui-row">
+                                <span class="kui-rowtag">手动单节点<small>MANUAL</small></span>
+                                <select v-model="newNodeParams[vps.ip].username" class="kui-ctl kui-w-owner" title="归属"><option :value="currentUser">👤 归属：管理员</option><option v-for="u in users" :value="u.username">👤 归属：{{ u.username }}</option></select>
+                                <select v-model="newNodeParams[vps.ip].protocol" class="kui-ctl kui-w-proto"><option value="XTLS-Reality">XTLS + Reality</option><option value="Hysteria2">Hysteria2 (极速)</option><option value="TUIC">TUIC v5 (高并发)</option><option value="Trojan">Trojan</option><option value="H2-Reality">H2 + Reality</option><option value="gRPC-Reality">gRPC + Reality</option><option value="AnyTLS">AnyTLS</option><option value="Naive">Naive</option><option disabled>──────────</option><option value="VLESS-Argo">VLESS Argo (IP被封)</option><option value="dokodemo-door">Dokodemo (内部转发)</option></select>
+                                <input v-model="newNodeParams[vps.ip].port" type="number" placeholder="端口" class="kui-ctl kui-w-port">
+                                <input v-model="newNodeParams[vps.ip].traffic_limit_gb" type="number" placeholder="限额 GB" title="配额(GB, 0=无限)" class="kui-ctl kui-w-num">
+                                <input v-model="newNodeParams[vps.ip].expire_date" type="date" title="到期日(留空永久)" class="kui-ctl kui-w-date">
+                                <input v-if="newNodeParams[vps.ip].protocol !== 'dokodemo-door'" v-model="newNodeParams[vps.ip].sni" :list="'sni-rec-' + vps.ip" :placeholder="['XTLS-Reality', 'H2-Reality', 'gRPC-Reality'].includes(newNodeParams[vps.ip].protocol) ? '伪装域名: 支持手填或下拉' : 'SNI 域名 / 主机名'" class="kui-ctl kui-w-sni">
+                                <datalist :id="'sni-rec-' + vps.ip"><option value="addons.mozilla.org"></option><option value="www.apple.com"></option><option value="gateway.icloud.com"></option><option value="itunes.apple.com"></option><option value="www.microsoft.com"></option></datalist>
+                                <button @click="addNode(vps.ip)" class="kui-ctl kui-fire">下发该节点</button>
+                            </div>
+                            <div v-if="newNodeParams[vps.ip].protocol === 'dokodemo-door'" class="kui-row">
+                                <span class="kui-rowtag">内部转发目标<small>DOKODEMO</small></span>
+                                <select v-model="newNodeParams[vps.ip].relay_type" class="kui-ctl kui-w-proto"><option value="external">外部目标地址</option><option value="internal">面板内部节点</option></select>
+                                <input v-if="newNodeParams[vps.ip].relay_type === 'external'" v-model="newNodeParams[vps.ip].target_ip" placeholder="目标 IP/域名" class="kui-ctl kui-w-sni">
+                                <input v-if="newNodeParams[vps.ip].relay_type === 'external'" v-model.number="newNodeParams[vps.ip].target_port" type="number" placeholder="目标端口" class="kui-ctl kui-w-num">
+                                <select v-else v-model="newNodeParams[vps.ip].target_id" class="kui-ctl kui-w-sni"><option value="">选择目标节点</option><option v-for="target in nodes.filter(n => n.id && n.protocol !== 'dokodemo-door')" :value="target.id">{{ getVpsName(target.vps_ip) }} · {{ target.protocol }}:{{ target.port }}</option></select>
                             </div>
 
                             <div class="bg-sky-50/70 p-4 rounded-[1.5rem] border border-sky-100 mt-4">
@@ -523,73 +789,124 @@
                         </div>
 
                         <div class="p-6 md:p-8 bg-slate-50/50 border-t border-white flex-1">
-                            <div v-for="node in getNodesByIp(vps.ip)" :key="node.id" class="bg-white/80 border border-white p-4 rounded-2xl mb-3 shadow-sm hover:shadow-md group transition-all">
+                            <div class="kui-nodes">
+                            <div v-for="node in getNodesByIp(vps.ip)" :key="node.id" class="bg-white/80 border border-white p-3 rounded-xl shadow-sm hover:shadow-md group transition-all flex flex-col">
                                 <div class="flex justify-between items-start mb-3">
                                     <div class="flex-1 overflow-hidden pr-2">
                                         <div class="flex items-center gap-2 mb-1.5"><span class="font-black text-slate-700">{{ node.protocol }} <span class="font-mono text-slate-400 text-xs bg-slate-100 px-1.5 rounded">#{{ node.port }}</span></span><span class="text-[10px] bg-purple-50 text-purple-600 px-2 py-0.5 rounded-md font-bold">👤 {{ node.username }}</span><span v-if="node.enable === 0" class="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md font-bold">已停用</span></div>
                                         <div v-if="node.protocol === 'VLESS-Argo'" class="text-[11px] p-1.5 rounded-lg overflow-hidden text-ellipsis whitespace-nowrap max-w-full inline-block" :class="node.sni.includes('等待') ? 'bg-amber-50 text-amber-600 animate-pulse font-bold' : 'bg-emerald-50 border border-emerald-100 text-emerald-700 font-mono font-bold'">Argo: {{ node.sni }}</div>
                                         <div v-else-if="node.sni" class="text-[11px] bg-slate-50 text-slate-500 p-1.5 rounded-lg overflow-hidden text-ellipsis font-mono inline-block">SNI: {{ node.sni }}</div>
                                     </div>
-                                    <div class="flex gap-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"><button @click="toggleNode(node.id, node.enable === 1 ? 0 : 1)" class="text-[11px] px-2 py-1 rounded-md bg-white border border-slate-200 hover:bg-slate-50 font-bold text-slate-600 shadow-sm">{{ node.enable === 1 ? '停用' : '启用' }}</button><button @click="deleteNode(node.id)" class="text-rose-500 text-[11px] px-2 py-1 bg-white border border-rose-100 rounded-md hover:bg-rose-50 font-bold shadow-sm">删除</button></div>
+                                    <div class="flex flex-col gap-1 shrink-0"><button @click="toggleNode(node.id, node.enable === 1 ? 0 : 1)" class="text-[11px] px-2 py-1 rounded-md bg-white border border-slate-200 hover:bg-slate-50 font-bold text-slate-600 shadow-sm">{{ node.enable === 1 ? '停用' : '启用' }}</button><button @click="deleteNode(node.id)" class="text-rose-500 text-[11px] px-2 py-1 bg-white border border-rose-100 rounded-md hover:bg-rose-50 font-bold shadow-sm">删除</button></div>
                                 </div>
                                 <div class="w-full bg-slate-100 rounded-full h-1.5 mt-2 overflow-hidden"><div :class="(node.traffic_limit > 0 && node.traffic_used >= node.traffic_limit) ? 'bg-rose-400' : 'bg-slate-800'" class="h-1.5 rounded-full transition-all duration-500" :style="{ width: getTrafficPercent(node.traffic_used, node.traffic_limit) + '%' }"></div></div>
                                 <div class="flex justify-between text-[10px] text-slate-400 mt-2 font-medium"><span>已用: {{ formatBytes(node.traffic_used) }} <span v-if="node.traffic_limit > 0">/ {{ formatBytes(node.traffic_limit) }}</span></span><div class="flex gap-3"><span v-if="node.expire_time > 0">到期: {{ formatDate(node.expire_time) }}</span><button v-if="node.traffic_used > 0" @click="resetTraffic(node.id)" class="text-indigo-500 hover:underline font-bold">清零</button></div></div>
                             </div>
+                            </div>
                             <div v-if="getNodesByIp(vps.ip).length === 0" class="text-center text-slate-400 text-xs py-6 border-2 border-dashed border-slate-200 rounded-2xl font-medium">节点矩阵为空，请在上方一键下发建立</div>
                         </div>
 
-                        <div class="p-4 md:p-6 bg-slate-100/50 border-t border-white flex flex-col gap-3">
-                            <div class="bg-slate-800 p-4 rounded-[1.25rem] group shadow-inner transition-colors">
-                                <div class="text-[10px] text-slate-400 font-bold uppercase mb-2 flex justify-between items-center">
-                                    <span>Full Deploy Command · KUI + 住宅双隧道</span>
-                                    <div class="flex gap-2 text-[9px]">
-                                        <label class="cursor-pointer hover:text-white flex items-center gap-1"><input type="radio" v-model="deployOsMap[vps.ip]" @change="saveOsMap" value="debian" class="accent-indigo-500"> Ubuntu/Debian</label>
-                                        <label class="cursor-pointer hover:text-white flex items-center gap-1"><input type="radio" v-model="deployOsMap[vps.ip]" @change="saveOsMap" value="alpine" class="accent-indigo-500"> Alpine</label>
-                                    </div>
-                                </div>
-                                <div class="text-emerald-400 font-mono text-xs truncate cursor-pointer hover:text-emerald-300 transition-colors" @click="copyCommand(generateCmd(vps.ip), '部署指令已复制！')">{{ generateCmd(vps.ip) }}</div>
-                            </div>
-                            <div class="grid grid-cols-2 gap-3">
-                                <div class="bg-gradient-to-br from-indigo-500 to-purple-600 p-3 rounded-[1.25rem] cursor-pointer transition flex items-center justify-center text-white font-bold shadow-lg hover:scale-[1.02] active:scale-95 text-xs text-center" @click="copyCommand(generateSubLink(vps.ip, ''), '单机节点普通订阅已复制！')">复制该机普通订阅</div>
-                                <div class="bg-gradient-to-br from-orange-500 to-red-500 p-3 rounded-[1.25rem] cursor-pointer transition flex items-center justify-center text-white font-bold shadow-lg hover:scale-[1.02] active:scale-95 text-xs text-center" @click="copyCommand(generateSubLink(vps.ip, 'clash'), '单机节点Clash订阅已复制！')">复制该机Clash订阅</div>
-                            </div>
+                        <!-- ① 部署命令与「此机」订阅已上移到下发区上方 -->
+                    </div>
+                </div>
+            </div>
+
+<div v-if="role === 'admin' && activeTab === 'users'" class="space-y-6">
+                <!-- 建号：只需一个用户名。无需密码、无需额度、无需到期日。
+                     用户的唯一凭证就是下面那一条订阅链接，区别在于能拉到哪些节点。 -->
+                <div class="kui-panel flex flex-col md:flex-row gap-4 items-end">
+                    <div class="flex-1 w-full">
+                        <label class="kui-lbl">用户名</label>
+                        <input v-model="newUser.username" placeholder="如: user01" class="kui-ctl" @keyup.enter="addUser">
+                    </div>
+                    <button @click="addUser" class="kui-fire px-8 py-3 whitespace-nowrap">开通用户</button>
+                </div>
+
+                <!-- 流量配额说明：本项目未接入 sing-box 流量统计（traffic_used 恒为 0），
+                     所以「流量配额」功能本期不可用，字段仍保留在 users 表里，以后接上统计即可启用。 -->
+                <div class="kui-note">
+                    <b>流量配额暂不可用</b>：面板尚未采集各节点的精确流量，用量数据无法统计。
+                    <code>traffic_limit</code> 字段已保留在数据库中，后续接入统计后自动生效，无需改表。
+                    当前可用的控制手段是<b>「停用开关」与「到期日」</b>。
+                </div>
+
+                <div v-if="users.length === 0" class="kui-empty">还没有用户，先在上方开通一个</div>
+
+                <div v-else class="kui-panel !p-0 overflow-hidden">
+                    <table class="kui-utable">
+                        <thead>
+                            <tr>
+                                <th style="width:20%">用户名</th>
+                                <th style="width:12%">状态</th>
+                                <th style="width:14%">到期</th>
+                                <th style="width:11%">订阅</th>
+                                <th style="width:11%">节点</th>
+                                <th style="width:9%">开关</th>
+                                <th style="width:7%"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="u in users" :key="u.username">
+                                <td class="font-bold text-slate-800">{{ u.username }}</td>
+                                <td>
+                                    <span v-if="isUserBlocked(u)" class="kui-tag-rose">⛔ {{ userBlockReason(u) }}</span>
+                                    <span v-else class="kui-tag-emerald">正常</span>
+                                </td>
+                                <td class="text-slate-500">{{ formatDate(u.expire_time) }}</td>
+                                <td>
+                                    <button @click="copyUserSub(u)" class="kui-mini" title="复制该用户的订阅链接">🔗 复制</button>
+                                </td>
+                                <td>
+                                    <button @click="toggleNodePicker(u)" class="kui-mini kui-mini-owner">
+                                        {{ userNodeIds(u).length }} 个
+                                    </button>
+                                </td>
+                                <td>
+                                    <!-- 一键热踢：关掉即停用，VPS 侧 iptables 立刻封端口，对方马上断联 -->
+                                    <label class="kui-switch" :class="{ 'is-off': u.enable !== 1 }" @click.prevent="toggleUser(u.username, u.enable === 1 ? 0 : 1)">
+                                        <input type="checkbox" :checked="u.enable === 1" readonly>
+                                        <span class="kui-switch-track"><span class="kui-switch-thumb"></span></span>
+                                        <span class="kui-switch-text">{{ u.enable === 1 ? '启用' : '停用' }}</span>
+                                    </label>
+                                </td>
+                                <td>
+                                    <button @click="deleteUser(u.username)" class="kui-mini kui-mini-danger" title="删除该用户">🗑</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 节点授权：直接在用户行里勾选，取代原来的「用户组」三步操作 -->
+                <div v-if="nodePickerFor" class="kui-panel">
+                    <div class="flex justify-between items-center mb-4 flex-wrap gap-3">
+                        <div>
+                            <h3 class="text-lg font-black text-slate-800">「{{ nodePickerFor }}」可用的节点</h3>
+                            <p class="text-xs text-slate-500 mt-1">共 {{ enabledNodes.length }} 个启用中的节点，已选 <b>{{ nodePickerDraft.length }}</b> 个。勾选后该用户的订阅只会拉到这些节点；取消勾选即收回。</p>
+                        </div>
+                        <div class="flex gap-2 flex-wrap items-center">
+                            <button @click="pickAllNodes" class="kui-mini" :class="{ 'kui-mini-owner': nodePickerDraft.length === enabledNodes.length && enabledNodes.length > 0 }">{{ nodePickerDraft.length === enabledNodes.length && enabledNodes.length > 0 ? '✓ 已全选' : '全选' }}</button>
+                            <button @click="pickNoNodes" class="kui-mini" :class="{ 'kui-mini-owner': nodePickerDraft.length === 0 }">{{ nodePickerDraft.length === 0 ? '✓ 已清空' : '清空' }}</button>
+                            <button @click="saveNodePicker" class="kui-fire px-5 py-2.5 text-sm">保存</button>
+                            <button @click="nodePickerFor = null" class="kui-mini">取消</button>
                         </div>
                     </div>
-                </div>
-            </div>
-
-            <div v-if="role === 'admin' && activeTab === 'users'" class="space-y-6">
-                <div class="bg-white/60 backdrop-blur-xl p-6 md:p-8 rounded-[2rem] border border-white shadow-xl shadow-slate-200/40 flex flex-col xl:flex-row gap-4 items-end">
-                    <div class="flex-1 w-full"><label class="block text-xs font-bold text-slate-400 mb-2 pl-2">新建用户名</label><input v-model="newUser.username" placeholder="如: user01" class="w-full bg-white/50 border border-white p-3 rounded-2xl transition hover:bg-white focus:bg-white"></div>
-                    <div class="flex-1 w-full relative"><label class="block text-xs font-bold text-slate-400 mb-2 pl-2">登录密码 / 随机UUID</label><input v-model="newUser.password" type="text" placeholder="自定义密码 或 UUID" class="w-full bg-white/50 border border-white p-3 pr-12 rounded-2xl transition hover:bg-white focus:bg-white font-mono text-sm"><button @click="generateUUIDForNewUser" title="随机生成 UUID 密码" class="absolute right-3 top-[34px] p-1 bg-white rounded-lg shadow-sm hover:bg-indigo-50 transition-colors">🔄</button></div>
-                    <div class="flex-1 w-full"><label class="block text-xs font-bold text-slate-400 mb-2 pl-2">配额 (GB)</label><input v-model="newUser.traffic_limit_gb" type="number" placeholder="0为无限" class="w-full bg-white/50 border border-white p-3 rounded-2xl transition hover:bg-white focus:bg-white"></div>
-                    <div class="flex-1 w-full"><label class="block text-xs font-bold text-slate-400 mb-2 pl-2">有效期</label><input v-model="newUser.expire_date" type="date" class="w-full bg-white/50 border border-white p-3 rounded-2xl text-slate-600 transition hover:bg-white focus:bg-white"></div>
-                    <button @click="addUser" class="w-full xl:w-auto bg-slate-800 text-white px-8 py-3.5 rounded-2xl font-bold hover:bg-black transition-all shadow-lg hover:scale-105 active:scale-95 whitespace-nowrap">开通用户</button>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <div v-for="u in users" :key="u.username" class="bg-white/70 backdrop-blur-xl p-6 rounded-[2rem] border border-white shadow-xl shadow-slate-200/40 hover:shadow-indigo-100/50 transition-all">
-                        <div class="flex justify-between items-start mb-6"><div><h3 class="text-2xl font-black text-slate-800 mb-1 flex items-center gap-2">{{ u.username }} <span v-if="u.enable===0" class="text-[10px] bg-rose-100 text-rose-600 px-2 py-1 rounded-lg">已封禁</span></h3><div class="text-xs text-slate-400 font-medium">到期: {{ formatDate(u.expire_time) }}</div></div><div class="flex gap-2"><button @click="toggleUser(u.username, u.enable===1?0:1)" class="px-3 py-1.5 bg-white border border-slate-100 hover:bg-slate-50 rounded-xl text-xs font-bold shadow-sm">{{ u.enable===1?'停用':'启用' }}</button><button @click="deleteUser(u.username)" class="px-3 py-1.5 bg-rose-50 text-rose-500 rounded-xl text-xs font-bold transition-all">删除</button></div></div>
-                        <div class="flex justify-between text-xs text-slate-500 mb-2 font-bold"><span>已用: {{ formatBytes(u.traffic_used) }}</span><span>上限: {{ u.traffic_limit > 0 ? formatBytes(u.traffic_limit) : '无限' }}</span></div>
-                        <div class="w-full bg-slate-100 rounded-full h-2.5 mb-3 overflow-hidden shadow-inner"><div :class="(u.traffic_limit > 0 && u.traffic_used >= u.traffic_limit) ? 'bg-rose-500' : 'bg-gradient-to-r from-blue-400 to-indigo-500'" class="h-2.5 rounded-full" :style="{ width: getTrafficPercent(u.traffic_used, u.traffic_limit) + '%' }"></div></div>
-                        <button v-if="u.traffic_used > 0" @click="resetUserTraffic(u.username)" class="text-[11px] text-indigo-500 font-bold hover:underline">重置流量</button>
+                    <div v-for="grp in nodesByVps" :key="grp.ip" class="kui-pick-group">
+                        <div class="kui-pick-grouphead">
+                            <label class="kui-pick kui-pick-vps">
+                                <input type="checkbox" :checked="isVpsFullyPicked(grp.ip)" @change="toggleVpsNodes(grp.ip)">
+                                <span>全选本机</span>
+                            </label>
+                            <span class="kui-pick-grouptitle">{{ grp.name }}<small>{{ grp.picked }}/{{ grp.items.length }} 已选</small></span>
+                        </div>
+                        <div class="kui-nodes-picker">
+                            <label v-for="n in grp.items" :key="n.id" class="kui-pick">
+                                <input type="checkbox" :value="n.id" v-model="nodePickerDraft">
+                                <span>{{ n.protocol }}:{{ n.port }}</span>
+                            </label>
+                        </div>
                     </div>
-                </div>
-            </div>
-
-            <div v-if="role === 'admin' && activeTab === 'users'" class="space-y-6 pt-4 border-t border-slate-200/70">
-                <div class="bg-indigo-50 border border-indigo-100 p-5 rounded-2xl text-sm text-indigo-800 font-medium">用户组可把整台 VPS 或单个节点授权给多个用户。用户订阅会自动合并其所属全部组的授权资源；未加入任何组的旧用户仍按原有“节点归属”规则工作。</div>
-                <div class="bg-white/70 backdrop-blur-xl p-6 rounded-[2rem] border border-white shadow-xl flex flex-col md:flex-row gap-4 items-end">
-                    <div class="flex-1 w-full"><label class="block text-xs font-bold text-slate-400 mb-2 pl-2">新用户组名称</label><input v-model="newGroupName" maxlength="64" placeholder="例如：流媒体组 / 商务组" class="w-full bg-white border border-slate-100 p-3 rounded-2xl outline-none"></div>
-                    <button @click="addGroup" class="w-full md:w-auto bg-slate-800 text-white px-8 py-3 rounded-2xl font-bold hover:bg-black">创建用户组</button>
-                </div>
-                <div v-if="groups.length === 0" class="text-center py-12 text-slate-400 font-medium border-2 border-dashed border-slate-200 rounded-3xl">尚未创建用户组</div>
-                <div v-for="group in groups" :key="group.id" class="bg-white/70 backdrop-blur-xl p-6 rounded-[2rem] border border-white shadow-xl space-y-5">
-                    <div class="flex justify-between gap-4 items-center"><div><h3 class="text-xl font-black text-slate-800">{{ group.name }}</h3><p class="text-xs text-slate-400 mt-1">成员 {{ groupDraft(group).members.length }} 人 · 已授权 {{ groupDraft(group).resources.length }} 项资源</p></div><button @click="deleteGroup(group)" class="text-rose-500 bg-rose-50 px-3 py-2 rounded-xl text-xs font-bold">删除用户组</button></div>
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                        <div><label class="block text-xs font-bold text-slate-500 mb-2">组成员</label><select multiple v-model="groupDraft(group).members" class="w-full h-36 bg-slate-50 border border-slate-100 rounded-xl p-3 text-sm outline-none"><option v-for="u in users" :key="u.username" :value="u.username">{{ u.username }}</option></select><p class="text-[10px] text-slate-400 mt-1">按 Ctrl / Command 多选</p></div>
-                        <div><label class="block text-xs font-bold text-slate-500 mb-2">可用资源</label><select multiple v-model="groupDraft(group).resources" class="w-full h-36 bg-slate-50 border border-slate-100 rounded-xl p-3 text-sm outline-none"><optgroup label="整台 VPS（包含该机所有节点）"><option v-for="vps in servers" :key="'vps:'+vps.ip" :value="'vps:'+vps.ip">VPS · {{ vps.name }} ({{ vps.ip }})</option></optgroup><optgroup label="单独节点"><option v-for="node in nodes" :key="'node:'+node.id" :value="'node:'+node.id">节点 · {{ getVpsName(node.vps_ip) }} · {{ node.protocol }}:{{ node.port }}</option></optgroup></select><p class="text-[10px] text-slate-400 mt-1">整机授权与单节点授权可叠加</p></div>
-                    </div>
-                    <div class="flex justify-end"><button @click="saveGroup(group)" class="bg-indigo-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold hover:bg-indigo-700">保存授权</button></div>
+                    <div v-if="enabledNodes.length === 0" class="text-sm text-slate-400">还没有启用中的节点</div>
                 </div>
             </div>
 
@@ -729,7 +1046,7 @@
                     <div class="bg-slate-900/40 backdrop-blur-xl border border-slate-800 rounded-2xl shadow-xl overflow-hidden shadow-black/20 mb-8">
                         <div class="px-6 py-4 border-b border-slate-800 bg-slate-900/50 flex justify-between items-center">
                             <h3 class="font-semibold text-slate-200 flex items-center gap-2">
-                                <div class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse"></div>
+                                <div class="w-2 h-2 rounded-full bg-emerald-500 kui-glow-ok-lg animate-pulse"></div>
                                 活跃节点矩阵
                             </h3>
                         </div>
@@ -776,9 +1093,9 @@
                                 VPS 实时运行日志 (Auto-Sync)
                             </span>
                             <span class="flex gap-1.5">
-                                <div class="w-3 h-3 rounded-full bg-rose-500/80 shadow-[0_0_5px_rgba(244,63,94,0.5)]"></div>
-                                <div class="w-3 h-3 rounded-full bg-amber-500/80 shadow-[0_0_5px_rgba(245,158,11,0.5)]"></div>
-                                <div class="w-3 h-3 rounded-full bg-emerald-500/80 shadow-[0_0_5px_rgba(16,185,129,0.5)]"></div>
+                                <div class="w-3 h-3 rounded-full bg-rose-500/80 kui-glow-bad"></div>
+                                <div class="w-3 h-3 rounded-full bg-amber-500/80 kui-glow-warn"></div>
+                                <div class="w-3 h-3 rounded-full bg-emerald-500/80 kui-glow-ok"></div>
                             </span>
                         </div>
                         <div class="p-4 h-64 overflow-y-auto bg-[#0D1117] pc-font-mono text-[13px] leading-relaxed text-slate-300" id="pc-terminal-output">
@@ -794,9 +1111,16 @@
                     <h2 class="text-4xl md:text-5xl font-black mb-3 text-slate-800 relative z-10">Hi, {{ currentUser }} 👋</h2>
                     <p class="text-slate-500 mb-10 font-medium relative z-10">欢迎来到您的专属网络服务中心</p>
                     <div class="max-w-md mx-auto bg-white/80 p-8 rounded-[2rem] border border-white shadow-xl shadow-slate-200/50 mb-10 relative z-10">
-                        <div class="flex justify-between text-sm font-black text-slate-700 mb-3"><span>已用流量: {{ formatBytes(users[0]?.traffic_used || 0) }}</span><span class="text-indigo-600">总量: {{ users[0]?.traffic_limit > 0 ? formatBytes(users[0].traffic_limit) : '无限制' }}</span></div>
-                        <div class="w-full bg-slate-100 rounded-full h-3 overflow-hidden shadow-inner mb-4"><div :class="users[0]?.traffic_used >= users[0]?.traffic_limit && users[0]?.traffic_limit > 0 ? 'bg-rose-500' : 'bg-gradient-to-r from-blue-400 to-indigo-500'" class="h-3 transition-all duration-1000 rounded-full" :style="{ width: getTrafficPercent(users[0]?.traffic_used||0, users[0]?.traffic_limit||0) + '%' }"></div></div>
-                        <div class="flex justify-between mt-4 pt-4 border-t border-slate-100 text-xs text-slate-500 font-medium"><span>账户状态: <span :class="users[0]?.enable === 1 ? 'text-emerald-500 font-bold bg-emerald-50 px-2 py-1 rounded' : 'text-rose-500 font-bold bg-rose-50 px-2 py-1 rounded'">{{ users[0]?.enable === 1 ? '🟢 正常运行' : '🔴 已被封禁' }}</span></span><span>到期时间: <span class="font-bold text-slate-700">{{ formatDate(users[0]?.expire_time) }}</span></span></div>
+                        <!-- 流量统计尚未接入（面板不采集逐节点流量），此处不展示恒为 0 的用量，避免误导。 -->
+                        <div class="flex justify-between items-center mb-4">
+                            <span class="text-sm font-black text-slate-700">账户状态</span>
+                            <span :class="users[0]?.enable === 1 ? 'text-emerald-600 font-bold bg-emerald-50 px-2.5 py-1 rounded-lg' : 'text-rose-600 font-bold bg-rose-50 px-2.5 py-1 rounded-lg'">{{ users[0]?.enable === 1 ? '🟢 正常' : '🔴 已停用' }}</span>
+                        </div>
+                        <div class="flex justify-between items-center pt-4 border-t border-slate-100">
+                            <span class="text-xs text-slate-500 font-medium">到期时间</span>
+                            <span class="text-sm font-bold text-slate-700">{{ formatDate(users[0]?.expire_time) }}</span>
+                        </div>
+                        <p class="mt-4 text-[11px] leading-relaxed text-slate-400">如无法连接，请先确认订阅已更新；如仍有问题请联系管理员。</p>
                     </div>
                     <div class="flex flex-col md:flex-row justify-center gap-4 relative z-10">
                         <button @click="copyCommand(generateSubLink('', ''), '普通订阅链接已复制！')" class="bg-gradient-to-r from-slate-800 to-black text-white font-black py-4 px-8 rounded-full shadow-2xl transition-all transform hover:scale-105 active:scale-95 text-lg">🔗 复制普通订阅</button>
@@ -1026,7 +1350,7 @@
                 <div class="flex justify-center bg-slate-50 p-4 rounded-2xl border border-slate-100">
                     <img :src="qrCodeImage" alt="QR Code" class="w-48 h-48 object-contain rounded-xl">
                 </div>
-                <button @click="qrModalOpen = false" class="mt-6 w-full bg-slate-800 text-white px-4 py-3 rounded-xl font-bold hover:bg-black transition-all">关 闭</button>
+                <button @click="qrModalOpen = false" class="mt-6 w-full  px-4 py-3 rounded-xl font-bold transition-all kui-fire !shadow-none">关 闭</button>
             </div>
         </div>
 
@@ -1052,18 +1376,22 @@
 
         createApp({
             setup() {
-                const isLoggedIn = ref(false); const showLoginModal = ref(false); 
+                const isLoggedIn = ref(false); const showLoginModal = ref(false);
                 const loginUser = ref(''); const password = ref('');
+                // 首次初始化：仓库不预置任何默认账密，未初始化时整个面板被setup 层接管
+                const setupRequired = ref(false); const setupBusy = ref(false); const setupError = ref('');
+                const setupUser = ref(''); const setupPass = ref(''); const setupConfirm = ref('');
                 const currentUser = ref(localStorage.getItem('kui_user') || ''); const authKey = ref(localStorage.getItem('kui_auth_key') || ''); const role = ref(localStorage.getItem('kui_role') || '');
                 const activeTab = ref(localStorage.getItem('monitor_preferred_tab') || 'probe'); 
                 const currentDomain = window.location.origin;
 
                 const servers = ref([]); const nodes = ref([]); const users = ref([]); const groups = ref([]);
+                const trafficHistory = reactive({});   // ip -> [{day, mb}]，供 VPS 头部 mini 柱图使用
                 const realtimeUrl = ref('');
                 const realtimeConnected = ref(false);
                 let realtimeSocket = null; let realtimeReconnectTimer = null; let realtimeFallbackTimer = null; let realtimeConnectTimer = null; let realtimePingTimer = null; let realtimeGeneration = 0; let realtimeDisconnectedAt = 0; let lastRealtimePing = 0; let realtimeRetryDelay = 5000;
                 let publicRealtimeSocket = null; let publicRealtimeReconnectTimer = null; let publicRealtimeFallbackTimer = null; let publicRealtimeConnectTimer = null; let publicRealtimeActivityTimer = null; let publicRealtimeDisconnectedAt = 0; let publicRealtimeRetryDelay = 10000;
-                const newVps = ref({ name: '', ip: '', os: 'debian' }); const newNodeParams = reactive({}); const newUser = reactive({ username: '', password: '', traffic_limit_gb: '', expire_date: '' }); const newGroupName = ref(''); const groupDrafts = reactive({});
+                const newVps = ref({ name: '', ip: '', os: 'debian' }); const newNodeParams = reactive({}); const newUser = reactive({ username: '' });
                 const mySubToken = ref(''); const siteTitle = ref(''); const siteTitleInput = ref(''); const userNewPassword = ref('');
                 const batchStartPort = reactive({}); const batchUser = reactive({}); 
                 const thirdPartySubscriptions = ref([]); const newThirdParty = reactive({ name: '', url: '' }); const loadingThirdParty = ref(false);
@@ -1100,7 +1428,7 @@
                 
                 const showWelcomePopup = ref(false);
 
-                watch(activeTab, (val) => { localStorage.setItem('monitor_preferred_tab', val); if (val === 'proxy' && isLoggedIn.value) { loadProxyPool(); setTimeout(pcInitProxy, 0); } else { pcStopProxy(); } if (val === 'thirdparty') loadThirdPartySubscriptions(); if (val === 'settings' && isLoggedIn.value && role.value === 'admin') loadAdminProbeServers(); if (val === 'probe') { updateCustomStyles(); updateCustomScript(probeSys.custom_script); } else { document.body.className = ''; document.getElementById('kui-custom-styles')?.remove(); document.getElementById('kui-custom-head')?.remove(); updateCustomScript(''); } });
+                watch(activeTab, (val) => { localStorage.setItem('monitor_preferred_tab', val); if (val === 'proxy' && isLoggedIn.value) { loadProxyPool(); setTimeout(pcInitProxy, 0); } else { pcStopProxy(); } if (val === 'thirdparty') loadThirdPartySubscriptions(); if (val === 'settings' && isLoggedIn.value && role.value === 'admin') loadAdminProbeServers(); if (val === 'probe') { updateCustomStyles(); updateCustomScript(probeSys.custom_script); } else { document.body.className = 'kui-skin'; document.getElementById('kui-custom-styles')?.remove(); document.getElementById('kui-custom-head')?.remove(); updateCustomScript(''); } });
                 watch(probeView, (val) => localStorage.setItem('monitor_preferred_view', val));
 
                 const hasCustomCssFlag = computed(() => {
@@ -1260,7 +1588,20 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                     options.headers = { ...options.headers, 'Authorization': `Bearer ${requestKey}` };
                     const res = await fetch(url, options);
                     if (generation !== authGeneration || requestUser !== currentUser.value) throw new Error('Stale session response');
-                    if (res.status === 401) { logout(); throw new Error('Unauthorized'); }
+                    if (res.status === 401) {
+                        // 任何一个端点的 401 都直接登出过于激进：探针/统计等辅助接口
+                        // 偶发 401 会把管理员踢回登录框，而真正该失效的只是 session 本身。
+                        // 复验一次核心接口，确认 token 真的无效才登出，避免误伤。
+                        let confirmed = false;
+                        try {
+                            const probe = await fetch('/api/data', { headers: { 'Authorization': `Bearer ${requestKey}`, 'Cache-Control': 'no-store' } });
+                            confirmed = probe.status === 401;
+                        } catch (e) { confirmed = true; }
+                        if (generation !== authGeneration) throw new Error('Stale session response');
+                        if (confirmed) { logout(); throw new Error('Unauthorized'); }
+                        console.warn('[KUI] 401 但 token 有效，已忽略:', url);
+                        throw new Error('Unauthorized(' + url + ')');
+                    }
                     if (!res.ok) {
                         const raw = await res.text();
                         let message = raw || `HTTP ${res.status}`;
@@ -1282,18 +1623,53 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                 window.kuiManagedServerIps = () => servers.value.map(server => server.ip).filter(Boolean);
 
                 const login = async () => {
-                    if (!loginUser.value) loginUser.value = 'admin';
+                    if (!loginUser.value) return alert('⚠️ 请输入用户名');
                     try {
                         const res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: loginUser.value, password: password.value }) });
                         if (res.ok) {
-                            authGeneration++;
-                            const data = await res.json(); authKey.value = data.token; currentUser.value = loginUser.value; role.value = data.role;
-                            localStorage.setItem('kui_auth_key', authKey.value); localStorage.setItem('kui_user', currentUser.value); localStorage.setItem('kui_role', role.value);
-                            isLoggedIn.value = true; showLoginModal.value = false; password.value = ''; const publicSocket = publicRealtimeSocket; publicRealtimeSocket = null; publicSocket?.close(); clearTimeout(publicRealtimeReconnectTimer); clearTimeout(publicRealtimeFallbackTimer); clearInterval(publicRealtimeActivityTimer);
-                            activeTab.value = role.value === 'admin' ? 'nodes' : 'dashboard';
-                            startPolling(); fetchProbeData(); queueMicrotask(connectRealtime);
+                            const data = await res.json();
+                            completeAuth(data.token, loginUser.value, data.role);
                         } else alert('⚠️ 账户名或密码错误');
                     } catch (e) { alert('登录异常'); }
+                };
+
+                // 登录与初始化共用的登录成功收尾（切页签、起轮询、连 realtime）
+                const completeAuth = (token, username, userRole) => {
+                    authGeneration++;
+                    authKey.value = token; currentUser.value = username; role.value = userRole;
+                    localStorage.setItem('kui_auth_key', authKey.value); localStorage.setItem('kui_user', currentUser.value); localStorage.setItem('kui_role', role.value);
+                    isLoggedIn.value = true; showLoginModal.value = false; setupRequired.value = false; password.value = ''; setupPass.value = ''; setupConfirm.value = '';
+                    const publicSocket = publicRealtimeSocket; publicRealtimeSocket = null; publicSocket?.close(); clearTimeout(publicRealtimeReconnectTimer); clearTimeout(publicRealtimeFallbackTimer); clearInterval(publicRealtimeActivityTimer);
+                    activeTab.value = role.value === 'admin' ? 'nodes' : 'dashboard';
+                    startPolling(); fetchProbeData(); queueMicrotask(connectRealtime);
+                };
+
+                const runSetup = async () => {
+                    if (setupBusy.value) return;
+                    setupError.value = '';
+                    if (!/^[A-Za-z0-9_.-]{1,64}$/.test(setupUser.value.trim())) return setupError.value = '用户名仅允许字母、数字、点、横线和下划线';
+                    if (setupPass.value.length < 12) return setupError.value = '密码至少 12 位';
+                    if (setupPass.value !== setupConfirm.value) return setupError.value = '两次输入的密码不一致';
+                    setupBusy.value = true;
+                    try {
+                        const res = await fetch('/api/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: setupUser.value.trim(), password: setupPass.value, confirm: setupConfirm.value }) });
+                        const data = await res.json().catch(() => ({}));
+                        if (res.ok && data.token) { completeAuth(data.token, data.username || setupUser.value.trim(), 'admin'); return; }
+                        setupError.value = data.error || `初始化失败（HTTP ${res.status}）`;
+                        // 409 = 已被别人抢先初始化，此时应回到正常登录流程
+                        if (res.status === 409) { setupRequired.value = false; showLoginModal.value = true; }
+                    } catch (e) { setupError.value = '网络异常，请重试'; }
+                    finally { setupBusy.value = false; }
+                };
+
+                const checkSetup = async () => {
+                    try {
+                        const res = await fetch('/api/setup', { headers: { 'Cache-Control': 'no-store' } });
+                        if (!res.ok) return;
+                        const data = await res.json();
+                        // 已有有效登录态时不要弹初始化层（例如管理员改密码后重定向回来）
+                        setupRequired.value = data.initialized === false && !(authKey.value && currentUser.value);
+                    } catch (e) {}
                 };
                 
                 const clearPrivateState = () => { servers.value = []; nodes.value = []; users.value = []; groups.value = []; adminProbeServers.value = []; mySubToken.value = ''; probeDetailId.value = null; probeDetail.value = {}; window.kuiRealtimeProxySnapshots = {}; };
@@ -1446,13 +1822,15 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                     try {
                         const res = await fetchApi('/api/data'); const data = await res.json();
                         const liveByIp = new Map(servers.value.filter(item => item._realtime_ts).map(item => [normalizeRealtimeKey(item.ip), item]));
-                        servers.value = (data.servers || []).map(item => { const live = liveByIp.get(normalizeRealtimeKey(item.ip)); return live && live._realtime_ts > Number(item.last_report || 0) ? { ...item, ...live } : item; }); nodes.value = data.nodes || []; users.value = data.users || []; groups.value = (data.groups || []).map(group => { let members = []; let resources = []; try { members = JSON.parse(group.members || '[]'); } catch (e) {} try { resources = JSON.parse(group.resources || '[]'); } catch (e) {} groupDrafts[group.id] = { members: Array.isArray(members) ? members : [], resources: Array.isArray(resources) ? resources.map(resource => `${resource.type}:${resource.id}`) : [] }; return group; });
+                        servers.value = (data.servers || []).map(item => { const live = liveByIp.get(normalizeRealtimeKey(item.ip)); return live && live._realtime_ts > Number(item.last_report || 0) ? { ...item, ...live } : item; }); nodes.value = data.nodes || []; users.value = data.users || [];
+                        // groups 仅作为旧数据兼容保留（用户组 UI 已移除，接口与表都不删，避免破坏线上库）。
+                        groups.value = data.groups || [];
                         if (data.siteTitle) { siteTitle.value = data.siteTitle; siteTitleInput.value = data.siteTitle; }
                         if (data.mySubToken) mySubToken.value = data.mySubToken;
                         if (data.realtimeUrl && data.realtimeUrl !== realtimeUrl.value) { realtimeUrl.value = data.realtimeUrl; connectRealtime(); }
                         servers.value.forEach(s => { 
-                            if(!newNodeParams[s.ip]) newNodeParams[s.ip] = { protocol: 'XTLS-Reality', port: 443, username: 'admin', sni: '', relay_type: 'external', target_ip: '', target_port: '', target_id: '', traffic_limit_gb: '', expire_date: '' };
-                            if(!deployOsMap[s.ip]) deployOsMap[s.ip] = 'debian'; if(!batchStartPort[s.ip]) batchStartPort[s.ip] = ''; if(!batchUser[s.ip]) batchUser[s.ip] = 'admin';
+                            if(!newNodeParams[s.ip]) newNodeParams[s.ip] = { protocol: 'XTLS-Reality', port: 443, username: currentUser.value || '', sni: '', relay_type: 'external', target_ip: '', target_port: '', target_id: '', traffic_limit_gb: '', expire_date: '' };
+                            if(!deployOsMap[s.ip]) deployOsMap[s.ip] = 'debian'; if(!batchStartPort[s.ip]) batchStartPort[s.ip] = ''; if(!batchUser[s.ip]) batchUser[s.ip] = currentUser.value || '';
                             if (s.egress_mode === 'socks5' || s.socks5_addr) { s._socks5_addr = s.socks5_addr || ''; s._socks5_port = s.socks5_port || 1080; s._socks5_user = s.socks5_user || ''; s._socks5_pass = s.socks5_pass || ''; }
                         });
                     if (activeTab.value === 'nodes') renderKUICharts();
@@ -1463,26 +1841,69 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                     } catch(e) {} finally { isFetchingKUI = false; }
                 };
 
+                /* 7 天流量：不再用 echarts 大图，改为统计标签行里的 mini 柱图 */
                 const renderKUICharts = async () => {
                     await nextTick();
                     for (let vps of servers.value) {
-                        const chartDom = document.getElementById('chart-' + vps.ip); if (!chartDom) continue;
-                        let myChart = echarts.getInstanceByDom(chartDom) || echarts.init(chartDom);
-                        const res = await fetchApi(`/api/stats?ip=${vps.ip}`); const stats = await res.json();
-                        myChart.setOption({ grid: { left: '8%', right: '5%', top: '5%', bottom: '15%' }, tooltip: { trigger: 'axis', backgroundColor: 'rgba(255, 255, 255, 0.9)', borderColor: '#e2e8f0', textStyle: { color: '#334155' } }, xAxis: { type: 'category', data: stats.map(s=>s.day), axisLabel: { color: '#94a3b8', fontSize: 10 }, axisLine: { lineStyle: { color: '#cbd5e1' } } }, yAxis: { type: 'value', show: false }, series: [{ data: stats.map(s=>(s.total_bytes/1024/1024).toFixed(2)), type: 'line', smooth: true, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: 'rgba(99, 102, 241, 0.2)' }, { offset: 1, color: 'rgba(99, 102, 241, 0)' }]) }, itemStyle: { color: '#6366f1' }, lineStyle: { width: 3 }, symbol: 'none' }] });
+                        try {
+                            const res = await fetchApi(`/api/stats?ip=${vps.ip}`);
+                            const stats = await res.json();
+                            trafficHistory[vps.ip] = (Array.isArray(stats) ? stats : []).map(s => ({ day: s.day, mb: Number(s.total_bytes || 0) / 1024 / 1024 }));
+                        } catch (e) { /* 单台失败不影响其他机器 */ }
                     }
                 };
+                /* mini 柱图：柱高与统计标签字号(14px)对齐 */
+                const sparkBars = (ip) => {
+                    const rows = trafficHistory[ip] || [];
+                    if (!rows.length) return [];
+                    const max = Math.max(...rows.map(r => r.mb), 0.0001);
+                    return rows.slice(-7).map((r, i) => ({
+                        i, isMax: r.mb === max,
+                        px: Math.max(2, Math.round(r.mb / max * 14)),
+                        title: `${r.day} ${r.mb.toFixed(1)} MB`
+                    }));
+                };
+                const sparkTitle = (ip) => {
+                    const rows = trafficHistory[ip] || [];
+                    if (!rows.length) return '近 7 天流量';
+                    const peak = Math.max(...rows.map(r => r.mb));
+                    return `近 7 天流量 · 峰值 ${peak.toFixed(1)} MB`;
+                };
 
-                const generateUUIDForNewUser = () => { newUser.password = crypto.randomUUID(); };
                 const expiryTimestamp = (date) => date ? new Date(`${date}T23:59:59.999`).getTime() : 0;
-                const addUser = async () => { const username = String(newUser.username || '').trim(); if (!/^[A-Za-z0-9_.-]{1,64}$/.test(username) || username === loginUser.value || username.toLowerCase() === 'admin') return alert('用户名仅允许字母、数字、点、横线和下划线，且不能使用管理员名'); if (!newUser.password || newUser.password.length < 8) return alert('密码至少 8 位'); const limit = newUser.traffic_limit_gb ? Math.floor(parseFloat(newUser.traffic_limit_gb) * 1073741824) : 0; const expire = expiryTimestamp(newUser.expire_date); await fetchApi('/api/users', { method: 'POST', body: JSON.stringify({ ...newUser, username, traffic_limit: limit, expire_time: expire }) }); Object.assign(newUser, { username: '', password: '', traffic_limit_gb: '', expire_date: '' }); refreshData(); };
-                const toggleUser = async (username, status) => { await fetchApi('/api/users', { method: 'PUT', body: JSON.stringify({ username, enable: status }) }); refreshData(); };
-                const deleteUser = async (username) => { if(confirm('⚠️ 确定删除用户？节点将归还给管理员。')) { await fetchApi(`/api/users?username=${username}`, { method: 'DELETE' }); refreshData(); } };
-                const resetUserTraffic = async (username) => { await fetchApi('/api/users', { method: 'PUT', body: JSON.stringify({ username, reset_traffic: true }) }); refreshData(); };
-                const groupDraft = group => groupDrafts[group.id] || (groupDrafts[group.id] = { members: [], resources: [] });
-                const addGroup = async () => { const name = newGroupName.value.trim(); if (!name) return alert('请输入用户组名称'); await fetchApi('/api/groups', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ name }) }); newGroupName.value = ''; refreshData(); };
-                const saveGroup = async group => { const draft = groupDraft(group); const resources = draft.resources.map(value => { const separator = value.indexOf(':'); return { type: value.slice(0, separator), id: value.slice(separator + 1) }; }).filter(resource => resource.type && resource.id); await fetchApi('/api/groups', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ id: group.id, members: draft.members, resources }) }); refreshData(); };
-                const deleteGroup = async group => { if (confirm(`确定删除用户组“${group.name}”？不会删除其中的用户或节点。`)) { await fetchApi(`/api/groups?id=${encodeURIComponent(group.id)}`, { method: 'DELETE' }); delete groupDrafts[group.id]; refreshData(); } };
+                // 建号：只需用户名。用户没有账密，订阅链接本身就是唯一凭证。
+                const addUser = async () => { const username = String(newUser.username || '').trim(); if (!/^[A-Za-z0-9_.-]{1,64}$/.test(username) || username === currentUser.value) return alert('用户名仅允许字母、数字、点、横线和下划线，且不能与管理员同名'); await fetchApi('/api/users', { method: 'POST', body: JSON.stringify({ username }) }); newUser.username = ''; refreshData(); };
+                // 一键热踢：停用后 VPS 侧 iptables 立刻封掉该用户名下所有节点端口，对方秒断。
+                const toggleUser = async (username, status) => { await fetchApi('/api/users', { method: 'PUT', body: JSON.stringify({ username, enable: status }) }); await refreshData(); showToast(status ? `已启用 ${username}，节点端口已解封` : `已停用 ${username}，节点端口已封、对方已断联`); };
+                const deleteUser = async (username) => { if(confirm(`确定删除用户 ${username}？\n\n· 其订阅链接立即失效\n· 名下节点不再向任何 VPS 下发\n\n建议改用「停用开关」，这样还能随时恢复。`)) { await fetchApi(`/api/users?username=${username}`, { method: 'DELETE' }); refreshData(); } };
+                const userSubToken = u => (u && u.sub_token) ? String(u.sub_token) : '';
+                const copyUserSub = async u => { const link = generateSubLink('', '', u.username, userSubToken(u)); copyCommand(link, `已复制 ${u.username} 的订阅链接`); };
+                const isUserBlocked = u => { if (u.enable !== 1) return true; const e = Number(u.expire_time || 0); return e > 0 && e <= Date.now(); };
+                const userBlockReason = u => { if (u.enable !== 1) return '已停用'; const e = Number(u.expire_time || 0); if (e > 0 && e <= Date.now()) return '已到期'; return ''; };
+                // 节点授权：直接在用户行里勾选，取代原来的「用户组」三步操作
+                const nodePickerFor = ref(null); const nodePickerDraft = ref([]);
+                const userNodeIds = u => nodes.value.filter(n => n.username === u.username).map(n => n.id);
+                const enabledNodes = computed(() => nodes.value.filter(n => n.enable === 1 && n.protocol !== 'dokodemo-door'));
+                // 按 VPS 分组展示，每个分组自带「全选本机」，另加全局全选/清空。
+                // 顺序跟随 servers 数组，保证与页面上的机器顺序一致。
+                const nodesByVps = computed(() => servers.value.map(s => {
+                    const items = enabledNodes.value.filter(n => n.vps_ip === s.ip);
+                    return { ip: s.ip, name: s.name || s.ip, items, picked: items.filter(n => nodePickerDraft.value.includes(n.id)).length };
+                }).filter(g => g.items.length > 0));
+                const isVpsFullyPicked = ip => { const g = nodesByVps.value.find(x => x.ip === ip); return !!g && g.items.length > 0 && g.picked === g.items.length; };
+                const toggleVpsNodes = ip => {
+                    const g = nodesByVps.value.find(x => x.ip === ip); if (!g) return;
+                    const ids = g.items.map(n => n.id);
+                    const all = ids.every(id => nodePickerDraft.value.includes(id));
+                    // 半选时点一下应全选，符合常见交互
+                    nodePickerDraft.value = all
+                        ? nodePickerDraft.value.filter(id => !ids.includes(id))
+                        : [...new Set(nodePickerDraft.value.concat(ids))];
+                };
+                const pickAllNodes = () => { nodePickerDraft.value = enabledNodes.value.map(n => n.id); };
+                const pickNoNodes = () => { nodePickerDraft.value = []; };
+                const toggleNodePicker = u => { if (nodePickerFor.value === u.username) { nodePickerFor.value = null; return; } nodePickerFor.value = u.username; nodePickerDraft.value = userNodeIds(u); };
+                const saveNodePicker = async () => { const u = nodePickerFor.value; if (!u) return; await fetchApi('/api/users', { method: 'PATCH', body: JSON.stringify({ username: u, nodes: nodePickerDraft.value }) }); nodePickerFor.value = null; await refreshData(); showToast(`已更新 ${u} 的可用节点`); };
                 const addVps = async () => { if(!newVps.value.ip || !newVps.value.name) return alert('请输入名称和IP'); deployOsMap[newVps.value.ip] = newVps.value.os; saveOsMap(); await fetchApi('/api/vps', { method: 'POST', body: JSON.stringify({ ip: newVps.value.ip, name: newVps.value.name }) }); newVps.value = { name: '', ip: '', os: 'debian' }; refreshData(); fetchProbeData();};
                 const deleteVps = async (ip) => { if(confirm('🧨 确定移除该机器？该机器相关的探针数据、节点数据将被完全清空！')) { await fetchApi(`/api/vps?ip=${ip}`, { method: 'DELETE' }); refreshData(); fetchProbeData();} };
                 const egressModeLabel = mode => ({ native: '原生出口', residential: '住宅 IP 代理', warp_ipv4: 'WARP IPv4', warp_ipv6: 'WARP IPv6', warp_dual: 'WARP 双栈', socks5: '手动 SOCKS5' }[mode] || mode);
@@ -1560,7 +1981,7 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                 
                 const deployAllProtocols = async (ip) => {
                     let startPort = parseInt(batchStartPort[ip]); if (!startPort || startPort < 10 || startPort + 7 > 65535) return alert('⚠️ 请输入有效的起始端口 (推荐: 8881)');
-                    const defaultSni = 'addons.mozilla.org'; const commonUser = batchUser[ip] || 'admin'; const commonUUID = crypto.randomUUID(); 
+                    const defaultSni = 'addons.mozilla.org'; const commonUser = batchUser[ip] || currentUser.value; if (!commonUser) return alert('⚠️ 请先登录'); const commonUUID = crypto.randomUUID(); 
                     const protocolSequence = [ { protocol: 'XTLS-Reality', offset: 0, sni: defaultSni, type: 'reality' }, { protocol: 'Hysteria2', offset: 1, sni: defaultSni }, { protocol: 'TUIC', offset: 2, sni: defaultSni }, { protocol: 'Trojan', offset: 3, sni: defaultSni }, { protocol: 'H2-Reality', offset: 4, sni: defaultSni, type: 'reality' }, { protocol: 'gRPC-Reality', offset: 5, sni: defaultSni, type: 'reality' }, { protocol: 'AnyTLS', offset: 6, sni: defaultSni }, { protocol: 'Naive', offset: 7, sni: defaultSni } ];
                     if (!confirm(`🚀 极速部署确认：\n\n系统将按照 FSCARMEN 模式，向该服务器并发下发完整 ${protocolSequence.length} 个协议矩阵：\n` + protocolSequence.map(p => `- ${p.protocol} (端口: ${startPort + p.offset})`).join('\n') + `\n\n所有节点归属: ${commonUser}\n\n确认立刻组建节点矩阵吗？`)) return;
                     const failures = [];
@@ -1583,17 +2004,41 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
 
                 const saveSiteTitle = async () => { if(!siteTitleInput.value) return alert('名称不能为空！'); await fetchApi('/api/settings', { method: 'POST', body: JSON.stringify({ site_title: siteTitleInput.value }) }); siteTitle.value = siteTitleInput.value; alert('✅ KUI 聚合面板名称保存成功！'); };
                 const updateUserPassword = async () => { if(!userNewPassword.value) return alert('请输入新密码'); await fetchApi('/api/user/password', { method: 'PUT', body: JSON.stringify({ password: userNewPassword.value }) }); alert('✅ 密码修改成功！请使用新密码重新登录。'); logout(); };
-                const resetMySubLink = async () => { if(confirm('🚨 危险操作！重置后系统将为您签发全新的 UUID 订阅令牌，原链接将【立即作废】！确定要继续重置吗？')) { await fetchApi('/api/user/sub_token', { method: 'PUT' }); alert('✅ 订阅令牌已刷新！'); refreshData(); } };
+                const resetMySubLink = async () => { if(confirm('🚨 危险操作！重置后系统将为您签发全新的 UUID 订阅令牌，原链接将【立即作废】！确定要继续重置吗？')) { try { const res = await fetchApi('/api/user/sub_token', { method: 'PUT' }); const r = await res.json().catch(() => null); if (r && r.token) mySubToken.value = r.token; const link = generateSubLink('', ''); try { await navigator.clipboard.writeText(link); } catch(e) {} showToast('订阅令牌已刷新，新链接已复制到剪贴板'); refreshData(); } catch(e) {} } };
                 
-                const generateSubLink = (ip='', format='') => { 
-                    const tokenToUse = mySubToken.value || authKey.value; 
-                    let link = `${currentDomain}/api/sub?user=${encodeURIComponent(currentUser.value)}&token=${encodeURIComponent(tokenToUse)}`;
+                // username/token 为可选覆盖：管理员给别人生成订阅链接时用，
+                // 缺省仍按当前登录者（保持原有调用行为不变）。
+                const generateSubLink = (ip='', format='', username='', token='') => {
+                    const tokenToUse = token || mySubToken.value || authKey.value;
+                    const userToUse = username || currentUser.value;
+                    let link = `${currentDomain}/api/sub?user=${encodeURIComponent(userToUse)}&token=${encodeURIComponent(tokenToUse)}`;
                     if (ip) link += `&ip=${ip}`;
                     if (format) link += `&format=${format}`;
                     return link;
                 };
+
+                // 轻量 toast：不打断操作，比 alert 更适合「已停用/已启用」这类反馈
+                let toastTimer = null;
+                const showToast = (msg) => {
+                    let el = document.getElementById('kui-toast');
+                    if (!el) {
+                        el = document.createElement('div');
+                        el.id = 'kui-toast';
+                        el.style.cssText = 'position:fixed;left:50%;top:22px;transform:translateX(-50%) translateY(-14px);z-index:9999;padding:11px 20px;border-radius:10px;background:#0f766e;color:#fff;font-size:13px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.18);opacity:0;transition:all .22s;pointer-events:none;max-width:80vw';
+                        document.body.appendChild(el);
+                    }
+                    el.textContent = msg;
+                    requestAnimationFrame(() => { el.style.opacity = '1'; el.style.transform = 'translateX(-50%) translateY(0)'; });
+                    clearTimeout(toastTimer);
+                    toastTimer = setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateX(-50%) translateY(-14px)'; }, 2600);
+                };
                 
-                const copyCommand = (txt, msg) => navigator.clipboard.writeText(txt).then(() => alert(msg));
+                // 复制反馈走 toast 自动消失，不再弹 alert 要求用户点「确定」——
+                // 10 个复制入口全部经由这里，一处替换即全站生效。
+                const copyCommand = (txt, msg) => navigator.clipboard
+                    .writeText(txt)
+                    .then(() => showToast(msg || '已复制到剪贴板'))
+                    .catch(() => showToast('复制失败，请手动选中复制'));
 
                 const showQrCode = (text) => {
                     try {
@@ -1802,6 +2247,7 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                 const stopPolling = () => { if (dataTimer) { clearInterval(dataTimer); dataTimer = null; } if (pingTimer) { clearInterval(pingTimer); pingTimer = null; } };
 
                 onMounted(async () => {
+                    await checkSetup();
                     if (authKey.value && currentUser.value) {
                         isLoggedIn.value = true;
                         if (role.value !== 'admin' && activeTab.value === 'proxy') activeTab.value = 'dashboard';
@@ -1817,11 +2263,13 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                 });
 
                 return { 
-                    isLoggedIn, showLoginModal, loginUser, password, currentUser, role, activeTab, 
-                    servers, nodes, users, groups, newVps, newNodeParams, newUser, newGroupName,
-                    login, logout, refreshData, addUser, toggleUser, deleteUser, resetUserTraffic, addGroup, saveGroup, deleteGroup, groupDraft, addVps, deleteVps, addNode, deleteNode, toggleNode, resetTraffic,
+                    isLoggedIn, showLoginModal, loginUser, password, currentUser, role, activeTab,
+                    setupRequired, setupBusy, setupError, setupUser, setupPass, setupConfirm, runSetup, 
+                    servers, nodes, users, groups, newVps, newNodeParams, newUser,
+                    login, logout, refreshData, addUser, toggleUser, deleteUser, userSubToken, copyUserSub, isUserBlocked, userBlockReason, userNodeIds, enabledNodes, nodesByVps, isVpsFullyPicked, toggleVpsNodes, pickAllNodes, pickNoNodes, nodePickerFor, nodePickerDraft, toggleNodePicker, saveNodePicker, showToast, addVps, deleteVps, addNode, deleteNode, toggleNode, resetTraffic,
                     getNodesByIp, getVpsName, formatBytes, formatDate, getExpireText, getTrafficPercent, getPingColor, isOnline, generateCmd, generateSubLink, copyCommand,
-                    globalOnline, globalTraffic, globalSpeedIn, globalSpeedOut, deployOsMap, saveOsMap, siteTitle, siteTitleInput, saveSiteTitle, userNewPassword, updateUserPassword, resetMySubLink, generateUUIDForNewUser, batchStartPort, batchUser, deployAllProtocols,
+                    sparkBars, sparkTitle,
+                    globalOnline, globalTraffic, globalSpeedIn, globalSpeedOut, deployOsMap, saveOsMap, siteTitle, siteTitleInput, saveSiteTitle, userNewPassword, updateUserPassword, resetMySubLink, batchStartPort, batchUser, deployAllProtocols,
                     probeSys, publicProbeServers, filteredProbeServers, probeView, probeDetailId, probeDetail, setProbeView, openProbeDetail, probeGlobalOnline, probeGlobalOffline, probeGlobalSpeedIn, probeGlobalSpeedOut, probeGlobalNetRx, probeGlobalNetTx, filteredProbeGroups, probeCountryStats, currentFilter,
                     saveProbeSettings, saveSubscriptionProtection, adminProbeServers, probeEditModalOpen, editingProbeNode, openProbeEditModal, saveProbeEdit, deleteProbeNode, currentDomain,
                     thirdPartySubscriptions, newThirdParty, loadingThirdParty, loadThirdPartySubscriptions, addThirdPartySubscription, toggleThirdPartySubscription, deleteThirdPartySubscription,
@@ -1844,7 +2292,6 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
         }
 
         async function getPcAuthHeader(method, path) {
-            const user = localStorage.getItem('kui_user') || 'admin';
             const key = localStorage.getItem('kui_auth_key') || '';
             if (!key) return '';
             return `Bearer ${key}`;
@@ -2075,7 +2522,7 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                                 <span class="bg-indigo-500/20 text-indigo-400 font-bold font-mono text-xs px-2 py-0.5 rounded-md mr-3 border border-indigo-500/20">${pcEscapeHtml(d.country)}</span>
                                 <span class="font-mono text-slate-300 text-sm tracking-wide mr-3" title="出口物理 IP">${pcEscapeHtml(d.node_ip || '---.---.---.---')}:${pcEscapeHtml(d.port)}</span>
                                 <span class="flex items-center gap-1.5 ${textColorClass} ${bgColorClass} px-2 py-0.5 rounded-md border ${borderColorClass} text-xs font-medium">
-                                    <span class="w-1.5 h-1.5 rounded-full ${statusColorClass} shadow-[0_0_5px_currentColor]"></span> ${statusText}
+                                    <span class="w-1.5 h-1.5 rounded-full ${statusColorClass} kui-glow"></span> ${statusText}
                                 </span>
                             </div>`;
                         }).join('') + '</div>';

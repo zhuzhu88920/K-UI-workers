@@ -99,7 +99,13 @@ async function verifyAdmin(header, request, env) {
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
     const tokenHash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
     const session = await env.DB.prepare("SELECT username FROM auth_sessions WHERE token_hash = ? AND expires_at > ?").bind(tokenHash, Date.now()).first();
-    if (session?.username === (env.ADMIN_USERNAME || "admin")) return true;
+    // 管理员名来自 admin_credentials（首次访问时由 /api/setup 写入），不再回退到
+    // 'admin' 字面量——那个名字在订阅 SQL 里是「管理员节点」的判定依据。
+    if (session?.username) {
+      const account = await env.DB.prepare("SELECT username FROM admin_credentials WHERE id = 1").first().catch(() => null);
+      const adminUsername = account?.username || (env.ADMIN_USERNAME ? String(env.ADMIN_USERNAME).trim() : "");
+      if (adminUsername && session.username === adminUsername) return true;
+    }
 
     // Signed browser requests are validated by the Pages API. Keep this
     // fallback for clients that have not yet migrated to session tokens.

@@ -37,6 +37,8 @@ SINGBOX_CONF_PATH = "/etc/sing-box/config.json"
 WARP_CONF_PATH = "/opt/kui/warp.json"
 WARP_STATE_PATH = "/opt/kui/egress-state.json"
 TRAFFIC_STATE_PATH = "/opt/kui/traffic-state.json"
+# 已因就绪检查失败被回滚的组件版本指纹（sha256，每行一个）。
+QUARANTINE_PATH = "/opt/kui/.quarantined-versions"
 WGCF_VERSION = "2.2.31"
 WGCF_ASSETS = {
     "x86_64": ("amd64", "69147e1a517c66129edd8ac8cb60484d6c9515178d7b4a2f95e3c925f225572a"),
@@ -338,9 +340,21 @@ def check_for_update():
     if now - last_update_check < 3600:
         return False
     last_update_check = now
+    #熔断：同一个 agent 组件版本如果已经因就绪检查失败被回滚过，
+    # 就不要再重复安装。CF 侧版本不会因为 VPS 回滚而变化，
+    # 没有这道闸门每轮检查都会重新装上同一个坏版本 → 无限重启循环。
+    quarantined = set()
+    try:
+        with open(QUARANTINE_PATH, 'r', encoding='utf-8') as qf:
+            quarantined = {line.strip() for line in qf if line.strip()}
+    except FileNotFoundError:
+        pass
+    except Exception:
+        pass
     targets = (("realtime-client", os.path.join(os.path.dirname(os.path.abspath(__file__)), "realtime_client.py")), ("agent", os.path.abspath(__file__)))
     temporary_files = []
     changed = []
+    installed_hashes = []
     try:
         for component, target in targets:
             temp_path = target + ".update.py"
@@ -360,11 +374,16 @@ def check_for_update():
             current_hash = hashlib.sha256(open(target, "rb").read()).hexdigest() if os.path.exists(target) else ""
             if current_hash == expected_hash:
                 continue
+            if expected_hash in quarantined:
+                # 该版本上次装上后没通过就绪检查，已被回滚。跳过它，
+                # 继续用当前 last-good 版本运行，而不是陷入装→失败→回滚→再装的死循环。
+                print(f"[agent] skipping quarantined {component} version {expected_hash[:12]}", flush=True)
+                continue
             with open(temp_path, "wb") as update_file: update_file.write(source)
             os.chmod(temp_path, 0o700)
             checked = subprocess.run([sys.executable, "-m", "py_compile", temp_path], capture_output=True, text=True, timeout=30)
             if checked.returncode != 0: raise ValueError(f"{component} update compile failed: {checked.stderr.strip()}")
-            changed.append((temp_path, target))
+            changed.append((temp_path, target)); installed_hashes.append(expected_hash)
         if not changed: return False
         replaced = []
         try:
@@ -376,7 +395,7 @@ def check_for_update():
             for target, backup in reversed(replaced):
                 if os.path.exists(backup): shutil.copy2(backup, target)
             raise
-        _write_json_state("/opt/kui/.update-pending", {"updated_at": int(time.time()), "deadline_at": int(time.time()) + 120, "files": [target for _, target in changed]})
+        _write_json_state("/opt/kui/.update-pending", {"updated_at": int(time.time()), "deadline_at": int(time.time()) + 120, "files": [target for _, target in changed], "component_hashes": installed_hashes})
         print("[agent] components updated, restarting", flush=True)
         os.execv(sys.executable, [sys.executable, os.path.abspath(__file__)])
     except Exception as error:
@@ -946,8 +965,8 @@ def build_singbox_config(nodes, proxy_cfg=None, peers=None, mesh=None, socks5_ou
         elif proto == "Hysteria2": singbox_config["inbounds"].append({"type": "hysteria2", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"password": node["uuid"]}], "tls": {"enabled": True, "alpn": ["h3"], "certificate_path": cert_path, "key_path": key_path}})
         elif proto == "TUIC": singbox_config["inbounds"].append({"type": "tuic", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"uuid": node["uuid"], "password": node["private_key"]}], "tls": {"enabled": True, "alpn": ["h3"], "certificate_path": cert_path, "key_path": key_path}})
         elif proto == "Trojan": singbox_config["inbounds"].append({"type": "trojan", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"password": node["private_key"]}], "tls": {"enabled": True, "server_name": sni, "certificate_path": cert_path, "key_path": key_path}})
-        elif proto == "H2-Reality": singbox_config["inbounds"].append({"type": "vless", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"uuid": node["uuid"]}], "tls": {"enabled": True, "server_name": sni, "alpn": ["h2", "http/1.1"], "reality": {"enabled": True, "handshake": {"server": sni, "server_port": 443}, "private_key": node["private_key"], "short_id": [node["short_id"]]}}, "transport": {"type": "http", "host": [sni], "path": "/"}})
-        elif proto == "gRPC-Reality": singbox_config["inbounds"].append({"type": "vless", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"uuid": node["uuid"]}], "tls": {"enabled": True, "server_name": sni, "alpn": ["h2"], "reality": {"enabled": True, "handshake": {"server": sni, "server_port": 443}, "private_key": node["private_key"], "short_id": [node["short_id"]]}}, "transport": {"type": "grpc", "service_name": "grpc"}})
+        elif proto == "H2-Reality": singbox_config["inbounds"].append({"type": "vless", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"uuid": node["uuid"]}], "tls": {"enabled": True, "alpn": ["h2", "http/1.1"], "reality": {"enabled": True, "handshake": {"server": sni, "server_port": 443}, "private_key": node["private_key"], "short_id": [node["short_id"]]}}, "transport": {"type": "http", "host": [sni], "path": "/"}})
+        elif proto == "gRPC-Reality": singbox_config["inbounds"].append({"type": "vless", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"uuid": node["uuid"]}], "tls": {"enabled": True, "alpn": ["h2"], "reality": {"enabled": True, "handshake": {"server": sni, "server_port": 443}, "private_key": node["private_key"], "short_id": [node["short_id"]]}}, "transport": {"type": "grpc", "service_name": "grpc"}})
         elif proto == "AnyTLS": singbox_config["inbounds"].append({"type": "anytls", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"password": node["private_key"]}], "tls": {"enabled": True, "certificate_path": cert_path, "key_path": key_path}})
         elif proto == "Naive": singbox_config["inbounds"].append({"type": "naive", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"username": node["uuid"], "password": node["private_key"]}], "tls": {"enabled": True, "certificate_path": cert_path, "key_path": key_path}})
         elif proto == "Socks5": singbox_config["inbounds"].append({"type": "socks", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"username": node["uuid"], "password": node["private_key"]}]})
@@ -1224,7 +1243,12 @@ def report_status(current_nodes, argo_urls, force_http=False, allow_http=True):
     websocket_sent = realtime_channel.send(status) if realtime_channel and realtime_channel.connected else False
     if websocket_sent and not force_http and time.time() - last_http_report < REALTIME_HTTP_INTERVAL:
         return True
-    if realtime_channel and realtime_channel.enabled and not websocket_sent and time.time() - realtime_channel.last_disconnected < 30:
+    # WebSocket 断线宽限期：给连接留出重连时间，期间不上报也不判定失败。
+    # force_http 是启动就绪检查专用信号，语义是"这次必须走 HTTP 并如实返回成败"，
+    # 因此必须跳过宽限早退——否则新 agent 启动瞬间 WS 必然未连上，
+    # last_disconnected 刚刷新 <30s，这里直接 return False，
+    # 就绪检查判定失败 → 回滚 → 下轮又更新 → 死循环，每轮都重启一次 sing-box。
+    if not force_http and realtime_channel and realtime_channel.enabled and not websocket_sent and time.time() - realtime_channel.last_disconnected < 30:
         return False
     if not websocket_sent and not allow_http:
         return False
@@ -1519,8 +1543,40 @@ if __name__ == "__main__":
     time.sleep(2)
     initial_nodes = fetch_and_apply_configs()
     if os.path.exists("/opt/kui/.update-pending"):
-        if initial_nodes is None or not _singbox_service_healthy() or not report_status(list(initial_nodes), [], force_http=True):
-            print("[agent] updated version failed readiness checks", flush=True)
+        # 逐项判定并打印具体失败原因。三个条件合并成一句 "failed readiness checks"
+        # 时，线上只能看到回滚却不知道是配置没拉下来、sing-box 没起来还是上报失败，
+        # 排查完全靠猜。这里把每一项单独求值，失败时明确报出是哪一项。
+        readiness_failures = []
+        if initial_nodes is None:
+            readiness_failures.append("config_fetch_or_apply_failed")
+        elif not _singbox_service_healthy():
+            readiness_failures.append("singbox_service_unhealthy")
+        elif not report_status(list(initial_nodes), [], force_http=True, allow_http=True):
+            readiness_failures.append("status_report_failed")
+        if readiness_failures:
+            print(f"[agent] updated version failed readiness checks: {','.join(readiness_failures)}", flush=True)
+            # 把这次装上的组件版本指纹写入熔断表。launcher 回滚组件后 CF 侧版本不会变，
+            # check_for_update 下一轮会算出同样的 sha256 并再次安装——没有熔断就形成
+            # 装→失败→回滚→再装的无限循环，每轮重启一次 sing-box，客户端被反复踢断。
+            try:
+                pending_meta = {}
+                with open("/opt/kui/.update-pending", "r", encoding="utf-8") as pf:
+                    loaded = json.load(pf)
+                    if isinstance(loaded, dict): pending_meta = loaded
+                bad_hashes = [h for h in (pending_meta.get("component_hashes") or []) if isinstance(h, str) and re.fullmatch(r"[0-9a-f]{64}", h)]
+                if bad_hashes:
+                    existing = []
+                    try:
+                        with open(QUARANTINE_PATH, 'r', encoding='utf-8') as qf:
+                            existing = [line.strip() for line in qf if line.strip()]
+                    except FileNotFoundError:
+                        pass
+                    merged = existing + [h for h in bad_hashes if h not in existing]
+                    with open(QUARANTINE_PATH, 'w', encoding='utf-8') as qf:
+                        qf.write("\n".join(merged[-20:]) + "\n")
+                    print(f"[agent] quarantined {len(bad_hashes)} component version(s) after failed readiness", flush=True)
+            except Exception as quarantineError:
+                print(f"[agent] failed to record quarantine list: {quarantineError}", flush=True)
             raise SystemExit(1)
         try: os.remove("/opt/kui/.update-pending")
         except FileNotFoundError: pass

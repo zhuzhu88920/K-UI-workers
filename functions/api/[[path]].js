@@ -85,11 +85,12 @@ function validateProxyReport(data) {
     return { ip: data.ip, details: normalized, logs: data.logs?.slice(0, 16 * 1024) || '' };
 }
 
-async function realtimeAdminHeader(env) {
-    if (!env.ADMIN_PASSWORD) return null;
-    const username = env.ADMIN_USERNAME || 'admin';
+async function realtimeAdminHeader(env, db) {
+    const credentials = await adminCredentials(db);
+    if (!credentials) return null;
+    const username = credentials.username;
+    const keyHex = await sha256(credentials.secret);
     const timestamp = Date.now().toString();
-    const keyHex = await sha256(env.ADMIN_PASSWORD);
     const keyBytes = new Uint8Array(keyHex.match(/.{2}/g).map(byte => parseInt(byte, 16)));
     const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
     const nonce = crypto.randomUUID();
@@ -99,7 +100,7 @@ async function realtimeAdminHeader(env) {
 }
 
 async function notifyRealtimePublicPolicy(env, db, enabled, pagesOrigin = '') {
-    const authorization = await realtimeAdminHeader(env);
+    const authorization = await realtimeAdminHeader(env, db);
     if (!authorization) return;
     const configured = env.REALTIME_URL || (await db.prepare("SELECT val FROM sys_config WHERE key = 'realtime_url'").first())?.val;
     if (!configured || !/^https:\/\//i.test(configured)) return;
@@ -120,7 +121,7 @@ function realtimeFrequencyPolicy(settings = {}) {
 
 async function notifyRealtimeFrequencyPolicy(env, db, settings, pagesOrigin = '') {
     const policy = realtimeFrequencyPolicy(settings);
-    const authorization = await realtimeAdminHeader(env);
+    const authorization = await realtimeAdminHeader(env, db);
     const configured = env.REALTIME_URL || (await db.prepare("SELECT val FROM sys_config WHERE key = 'realtime_url'").first())?.val;
     if (!policy || !authorization || !configured || !/^https:\/\//i.test(configured)) return;
     await fetch(`${configured.replace(/\/$/, '')}/frequency-policy`, {
@@ -131,7 +132,7 @@ async function notifyRealtimeFrequencyPolicy(env, db, settings, pagesOrigin = ''
 }
 
 async function notifyRealtimeVps(env, db, ip, pagesOrigin = '') {
-    const authorization = await realtimeAdminHeader(env);
+    const authorization = await realtimeAdminHeader(env, db);
     const configured = env.REALTIME_URL || (await db.prepare("SELECT val FROM sys_config WHERE key = 'realtime_url'").first())?.val;
     if (!authorization || !configured || !/^https:\/\//i.test(configured)) return;
     await fetch(`${configured.replace(/\/$/, '')}/notify`, { method: 'POST', headers: { Authorization: authorization, 'Content-Type': 'application/json', 'X-KUI-Pages-Origin': pagesOrigin }, body: JSON.stringify({ ip }) });
@@ -488,14 +489,17 @@ async function initializeDbSchema(db) {
     const initQueries = [
         `CREATE TABLE IF NOT EXISTS servers (ip TEXT PRIMARY KEY, name TEXT NOT NULL, cpu INTEGER DEFAULT 0, mem REAL DEFAULT 0, last_report INTEGER DEFAULT 0, alert_sent INTEGER DEFAULT 0, disk INTEGER DEFAULT 0, load TEXT DEFAULT "", uptime TEXT DEFAULT "", net_in_speed INTEGER DEFAULT 0, net_out_speed INTEGER DEFAULT 0, tcp_conn INTEGER DEFAULT 0, udp_conn INTEGER DEFAULT 0)`,
         `CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT NOT NULL, traffic_limit INTEGER DEFAULT 0, traffic_used INTEGER DEFAULT 0, expire_time INTEGER DEFAULT 0, enable INTEGER DEFAULT 1, sub_token TEXT)`,
-        `CREATE TABLE IF NOT EXISTS nodes (id TEXT PRIMARY KEY, uuid TEXT NOT NULL, vps_ip TEXT NOT NULL, protocol TEXT NOT NULL, port INTEGER NOT NULL, sni TEXT, private_key TEXT, public_key TEXT, short_id TEXT, relay_type TEXT, target_ip TEXT, target_port INTEGER, target_id TEXT, enable INTEGER DEFAULT 1, traffic_used INTEGER DEFAULT 0, traffic_limit INTEGER DEFAULT 0, expire_time INTEGER DEFAULT 0, username TEXT DEFAULT 'admin', network TEXT DEFAULT 'tcp', FOREIGN KEY(vps_ip) REFERENCES servers(ip) ON DELETE CASCADE)`,
+        `CREATE TABLE IF NOT EXISTS nodes (id TEXT PRIMARY KEY, uuid TEXT NOT NULL, vps_ip TEXT NOT NULL, protocol TEXT NOT NULL, port INTEGER NOT NULL, sni TEXT, private_key TEXT, public_key TEXT, short_id TEXT, relay_type TEXT, target_ip TEXT, target_port INTEGER, target_id TEXT, enable INTEGER DEFAULT 1, traffic_used INTEGER DEFAULT 0, traffic_limit INTEGER DEFAULT 0, expire_time INTEGER DEFAULT 0, username TEXT DEFAULT '', network TEXT DEFAULT 'tcp', FOREIGN KEY(vps_ip) REFERENCES servers(ip) ON DELETE CASCADE)`,
         `CREATE TABLE IF NOT EXISTS traffic_stats (id INTEGER PRIMARY KEY AUTOINCREMENT, ip TEXT NOT NULL, delta_bytes INTEGER DEFAULT 0, timestamp INTEGER NOT NULL, FOREIGN KEY(ip) REFERENCES servers(ip) ON DELETE CASCADE)`,
         `CREATE INDEX IF NOT EXISTS idx_traffic_ip_time ON traffic_stats(ip, timestamp)`,
         `CREATE TABLE IF NOT EXISTS sys_config (key TEXT PRIMARY KEY, val TEXT, ts INTEGER)`,
+        `CREATE TABLE IF NOT EXISTS admin_credentials (id INTEGER PRIMARY KEY CHECK (id = 1), username TEXT NOT NULL, password TEXT NOT NULL, hmac_key TEXT NOT NULL, updated_at INTEGER NOT NULL)`,
         `CREATE TABLE IF NOT EXISTS proxy_ctrl_servers (ip TEXT PRIMARY KEY, details TEXT, last_seen INTEGER)`,
         `CREATE TABLE IF NOT EXISTS server_logs (ip TEXT PRIMARY KEY, logs TEXT, updated_at INTEGER)`,
         `CREATE TABLE IF NOT EXISTS proxy_slot_map (key TEXT PRIMARY KEY, value TEXT)`,
         `CREATE TABLE IF NOT EXISTS report_receipts (report_id TEXT PRIMARY KEY, vps_ip TEXT NOT NULL, created_at INTEGER NOT NULL, applied INTEGER DEFAULT 1)`,
+        `CREATE INDEX IF NOT EXISTS idx_receipts_created_at ON report_receipts(created_at)`,
+        `CREATE TABLE IF NOT EXISTS retired_agent_tokens (token TEXT PRIMARY KEY, ip TEXT NOT NULL, retired_at INTEGER NOT NULL)`,
         `CREATE TABLE IF NOT EXISTS auth_replays (nonce TEXT PRIMARY KEY, username TEXT NOT NULL, expires_at INTEGER NOT NULL)`,
         `CREATE TABLE IF NOT EXISTS login_throttles (key TEXT PRIMARY KEY, failures INTEGER NOT NULL, window_started_at INTEGER NOT NULL, blocked_until INTEGER NOT NULL DEFAULT 0)`,
         `CREATE TABLE IF NOT EXISTS auth_sessions (token_hash TEXT PRIMARY KEY, username TEXT NOT NULL, expires_at INTEGER NOT NULL)`,
@@ -527,7 +531,23 @@ async function initializeDbSchema(db) {
     ];
     for (let query of probeQueries) { try { await db.prepare(query).run(); } catch (e) {} }
 
-    try { await db.prepare("SELECT username FROM nodes LIMIT 1").first(); } catch (e) { try { await db.prepare("ALTER TABLE nodes ADD COLUMN username TEXT DEFAULT 'admin'").run(); } catch(e){} }
+    // 旧库可能已建过不带 hmac_key 的 admin_credentials 表，补列；旧库残留的 DEFAULT 'admin' 也一并纠正，
+    // 否则任何漏传 username 的节点插入都会落到 'admin'，而 SQL 判定 'admin' 为管理员节点并对所有人下发。
+    try { await db.prepare("SELECT hmac_key FROM admin_credentials LIMIT 1").first(); } catch (e) { try { await db.prepare("ALTER TABLE admin_credentials ADD COLUMN hmac_key TEXT NOT NULL DEFAULT ''").run(); } catch(e){} }
+    try { await db.prepare("SELECT username FROM nodes LIMIT 1").first(); } catch (e) { try { await db.prepare("ALTER TABLE nodes ADD COLUMN username TEXT DEFAULT ''").run(); } catch(e){} }
+    // 建表语句里的 DEFAULT 'admin' 已改为 ''；这里纠正已建好的旧表默认值，并把空/'admin' 归属补到
+    // 当前管理员名下（管理员自建名后立即生效）。旧管理员名 → 新名的过户由 /api/setup 显式完成，
+    // 因为扫描表无法区分「旧管理员名」与「普通用户名」，猜错会把别人的节点一起过户。
+    try {
+        const adminNameNow = await adminName(db, schemaEnv);
+        if (adminNameNow) {
+            const mark = await db.prepare("SELECT val FROM sys_config WHERE key = 'nodes_owner_backfilled'").first();
+            if (!mark || mark.val !== adminNameNow) {
+                await db.prepare("UPDATE nodes SET username = ? WHERE username = 'admin' OR username IS NULL OR username = ''").bind(adminNameNow).run();
+                await db.prepare("INSERT OR REPLACE INTO sys_config (key, val, ts) VALUES ('nodes_owner_backfilled', ?, ?)").bind(adminNameNow, Date.now()).run();
+            }
+        }
+    } catch (e) {}
     try { await db.prepare("SELECT disk FROM servers LIMIT 1").first(); } catch (e) { const newCols = ['disk INTEGER DEFAULT 0', 'load TEXT DEFAULT ""', 'uptime TEXT DEFAULT ""', 'net_in_speed INTEGER DEFAULT 0', 'net_out_speed INTEGER DEFAULT 0', 'tcp_conn INTEGER DEFAULT 0', 'udp_conn INTEGER DEFAULT 0']; for (let col of newCols) { try { await db.prepare(`ALTER TABLE servers ADD COLUMN ${col}`).run(); } catch(err){} } }
     try { await db.prepare("SELECT sub_token FROM users LIMIT 1").first(); } catch (e) { try { await db.prepare("ALTER TABLE users ADD COLUMN sub_token TEXT").run(); } catch(err){} }
     try {
@@ -579,7 +599,9 @@ async function initializeDbSchema(db) {
     for (let query of tpsQueries) { try { await db.prepare(query).run(); } catch (e) {} }
 }
 
-async function ensureDbSchema(db) {
+let schemaEnv = null;
+async function ensureDbSchema(db, env) {
+    if (env) schemaEnv = env;
     if (!schemaReadyPromise) {
         schemaReadyPromise = initializeDbSchema(db).catch(error => {
             schemaReadyPromise = null;
@@ -589,9 +611,41 @@ async function ensureDbSchema(db) {
     return schemaReadyPromise;
 }
 
+// ---- 管理员身份来源 ----
+// 优先读数据库 admin_credentials（首次访问时由 /api/setup 写入），
+// 仅当该表为空时回退到环境变量，兼容未初始化的旧部署。
+// 不再回退到 'admin' 字面量：那个名字会在订阅 SQL 里被当作管理员节点判定依据。
+async function adminAccount(db) {
+    if (!db) return null;
+    try {
+        const row = await db.prepare('SELECT username, password, hmac_key FROM admin_credentials WHERE id = 1').first();
+        if (row && row.username) return row;
+    } catch (e) {}
+    return null;
+}
+
+async function adminName(db, env) {
+    const account = await adminAccount(db);
+    if (account) return account.username;
+    const fallback = env && env.ADMIN_USERNAME ? String(env.ADMIN_USERNAME).trim() : '';
+    return fallback;
+}
+
+// 供 Worker → realtime 的 HMAC 自证使用。secret 必须是可重算的原文，
+// 因此与登录用的 PBKDF2 哈希分开存放。
+async function adminCredentials(db, env) {
+    const account = await adminAccount(db);
+    if (account) return { username: account.username, secret: account.hmac_key || '' };
+    if (env && env.ADMIN_PASSWORD) {
+        const username = env.ADMIN_USERNAME ? String(env.ADMIN_USERNAME).trim() : '';
+        if (username) return { username, secret: env.ADMIN_PASSWORD };
+    }
+    return null;
+}
+
 async function verifyAuth(authHeader, request, db, env, context) {
     try {
-        if (!authHeader || !env.ADMIN_PASSWORD) return null;
+        if (!authHeader) return null;
         if (authHeader.startsWith('Bearer ')) {
             const token = authHeader.slice(7);
             if (!/^[A-Za-z0-9_-]{32,128}$/.test(token)) return null;
@@ -599,8 +653,10 @@ async function verifyAuth(authHeader, request, db, env, context) {
             const session = await db.prepare('SELECT username FROM auth_sessions WHERE token_hash = ? AND expires_at > ?').bind(tokenHash, Date.now()).first();
             return session?.username || null;
         }
-        const adminUser = env.ADMIN_USERNAME || "admin";
-        const adminPass = env.ADMIN_PASSWORD;
+        const credentials = await adminCredentials(db, env);
+        if (!credentials || !credentials.secret) return null;
+        const adminUser = credentials.username;
+        const adminPass = credentials.secret;
         const parts = authHeader.split('.');
         if (parts.length !== 4) return null;
         const [b64User, timestamp, nonce, clientSig] = parts;
@@ -630,6 +686,14 @@ async function verifyAgent(authHeader, ip, db, env) {
     if (ip) {
         const server = await db.prepare("SELECT agent_token FROM servers WHERE ip = ?").bind(ip).first();
         if (server && server.agent_token && authHeader === server.agent_token) return true;
+        // Self-heal for token rotation: deleting and re-adding a VPS signs a new
+        // agent_token, and the old agent cannot learn it without passing auth first
+        // (deadlock). Allow a recently retired token for the SAME ip; /api/config
+        // echoes the current token in its response and the agent persists it.
+        try {
+            const retired = await db.prepare("SELECT ip FROM retired_agent_tokens WHERE token = ? AND ip = ? AND retired_at > ?").bind(authHeader, ip, Date.now() - 30 * 86400000).first();
+            if (retired) return true;
+        } catch (e) {}
     }
     return false;
 }
@@ -734,7 +798,7 @@ async function handleProbeAPI(request, env, context, pathArray) {
 
     const probeUser = await verifyAuth(request.headers.get("Authorization"), request, db, env, context);
     if (!probeUser) return Response.json({error: "Unauthorized"}, {status: 401});
-    if (subPath.startsWith('admin/') && probeUser !== (env.ADMIN_USERNAME || 'admin')) return Response.json({error: "Forbidden"}, {status: 403});
+    if (subPath.startsWith('admin/') && probeUser !== (await adminName(db, env))) return Response.json({error: "Forbidden"}, {status: 403});
 
     // 🌟 GitHub 云端拉取三网节点库
     if (method === 'POST' && subPath === 'admin/pull_github') {
@@ -1041,7 +1105,12 @@ export async function onRequest(context) {
         const assetUrl = new URL(assets[component], request.url);
         const asset = await env.ASSETS.fetch(assetUrl);
         if (!asset.ok) return new Response('Agent asset not found', { status: 404 });
-        const source = await asset.arrayBuffer();
+        // 下发前剥离 CR：这些脚本在 Linux 上执行，CRLF 会让 bash 报
+        // `$'\r': command not found` 并打断安装。仓库侧已用 .gitattributes 锁死 LF，
+        // 但部署者可能在 Windows 上直接编辑工作区文件（core.autocrlf 会转成 CRLF），
+        // 所以服务端再兜一层，保证下发的永远是纯 LF。
+        const raw = await asset.text();
+        const source = new TextEncoder().encode(raw.replace(/\r\n?/g, '\n'));
         const digest = await crypto.subtle.digest('SHA-256', source);
         const sha256 = Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, '0')).join('');
         const server = await db.prepare('SELECT agent_token FROM servers WHERE ip = ?').bind(ip).first();
@@ -1198,13 +1267,38 @@ export async function onRequest(context) {
 
     if (action === "config" && method === "GET") {
         await ensureDbSchema(db);
-        const ip = new URL(request.url).searchParams.get("ip"); const now = Date.now(); const adminUser = env.ADMIN_USERNAME || "admin";
+        const ip = new URL(request.url).searchParams.get("ip"); const now = Date.now(); const adminUser = await adminName(db, env);
         const authHeader = request.headers.get("Authorization");
         const currentUser = await verifyAuth(authHeader, request, db, env, context);
         const agentAuthenticated = await verifyAgent(authHeader, ip, db, env);
         if (currentUser !== adminUser && !agentAuthenticated) return new Response("Unauthorized", { status: 401 });
         const query = `SELECT n.* FROM nodes n LEFT JOIN users u ON n.username = u.username WHERE n.vps_ip = ? AND n.enable = 1 AND (n.traffic_limit = 0 OR n.traffic_used < n.traffic_limit) AND (n.expire_time = 0 OR n.expire_time > ?) AND (n.username = ? OR n.username = 'admin' OR (u.username IS NOT NULL AND u.enable = 1 AND (u.traffic_limit = 0 OR u.traffic_used < u.traffic_limit) AND (u.expire_time = 0 OR u.expire_time > ?)))`;
         const { results: machineNodes } = await db.prepare(query).bind(ip, now, adminUser, now).all();
+        // 热踢端口清单：所有「已停用 / 已过期 / 已禁用」用户名下的节点端口。
+        // agent 用 iptables DROP 这些端口实现秒级断联，无需重启 sing-box、不影响同机其他用户。
+        // 恢复时（重新启用或改回归属）同一列表会缩短，agent 收到后自动删除对应 DROP 规则。
+        // 必须用 LEFT JOIN：节点归属的用户被「删除」后，JOIN 匹配不到任何行，
+        // 该节点就不会进名单。但此时 sing-box 的旧配置仍会监听该端口直到
+        // agent 完成重载（10~30 秒窗口），热踢语义要求这段窗口也断联，
+        // 所以 u.username IS NULL（归属用户已不存在）同样纳入封禁。
+        // 关键：管理员不是 users 表里的记录，其节点在 LEFT JOIN 下同样呈现为
+        // u.username IS NULL，若不显式排除会把自己的端口（含 443）一起封掉，
+        // 结果是全站（含管理员订阅）立刻失联。因此必须排除两个管理员字面量。
+        let blockedPorts = [];
+        try {
+            const blockedRows = await db.prepare(`
+                SELECT DISTINCT n.port AS port,
+                    CASE WHEN n.protocol IN ('Hysteria2','TUIC') THEN 'udp' ELSE 'tcp' END AS transport
+                FROM nodes n LEFT JOIN users u ON u.username = n.username
+                WHERE n.vps_ip = ? AND n.enable = 1
+                  AND n.username NOT IN (?, 'admin')
+                  AND (u.username IS NULL OR u.enable = 0 OR (u.expire_time > 0 AND u.expire_time <= ?))
+            `).bind(ip, adminUser, now).all();
+            for (const r of blockedRows.results || []) {
+                const p = Number(r.port);
+                if (Number.isInteger(p) && p > 0 && p < 65536) blockedPorts.push({ port: p, transport: r.transport === 'udp' ? 'udp' : 'tcp' });
+            }
+        } catch (e) {}
         for (let node of machineNodes) { if (node.protocol === "dokodemo-door" && node.relay_type === "internal") { const targetNode = await db.prepare("SELECT * FROM nodes WHERE id = ?").bind(node.target_id).first(); if (targetNode) node.chain_target = { ip: targetNode.vps_ip, port: targetNode.port, protocol: targetNode.protocol, uuid: targetNode.uuid, password: targetNode.private_key, sni: targetNode.sni, public_key: targetNode.public_key, short_id: targetNode.short_id }; } }
         let proxyCfg = { global: {}, toggle: { enable: false } };
         try {
@@ -1228,7 +1322,7 @@ export async function onRequest(context) {
         } catch (ex) {}
         const serverAuth = await db.prepare("SELECT agent_token FROM servers WHERE ip = ?").bind(ip).first();
         const realtime = await db.prepare("SELECT val FROM sys_config WHERE key = 'realtime_url'").first();
-        return Response.json({ success: true, configs: machineNodes, agent_token: serverAuth && serverAuth.agent_token || '', proxy: proxyCfg, residential_outbound, egress, realtime_url: env.REALTIME_URL || realtime && realtime.val || '' });
+        return Response.json({ success: true, configs: machineNodes, blocked_ports: blockedPorts, agent_token: serverAuth && serverAuth.agent_token || '', proxy: proxyCfg, residential_outbound, egress, realtime_url: env.REALTIME_URL || realtime && realtime.val || '' });
     }
 
         if (action === "egress_result" && method === "POST") {
@@ -1278,10 +1372,10 @@ export async function onRequest(context) {
         } else if (sub === 'config' && method === 'GET') {
             const requestIp = new URL(request.url).searchParams.get('ip');
             const user = await verifyAuth(request.headers.get('Authorization'), request, db, env, context);
-            if (user !== (env.ADMIN_USERNAME || 'admin') && !(await verifyAgent(request.headers.get('Authorization'), requestIp, db, env))) return new Response('Forbidden', { status: 403 });
+            if (user !== (await adminName(db, env)) && !(await verifyAgent(request.headers.get('Authorization'), requestIp, db, env))) return new Response('Forbidden', { status: 403 });
         } else {
             const user = await verifyAuth(request.headers.get('Authorization'), request, db, env, context);
-            if (user !== (env.ADMIN_USERNAME || 'admin')) return new Response('Forbidden', { status: 403 });
+            if (user !== (await adminName(db, env))) return new Response('Forbidden', { status: 403 });
         }
         return await proxyBridge(method, sub, request, env);
     }
@@ -1298,35 +1392,53 @@ export async function onRequest(context) {
         const reqUser = urlObj.searchParams.get("user"); 
         const token = urlObj.searchParams.get("token"); 
         const format = urlObj.searchParams.get("format"); 
-        const adminUser = env.ADMIN_USERNAME || "admin";
+        const adminUser = await adminName(db, env);
 
         let isValid = false;
-        if (reqUser === adminUser) { 
+        let blockedReason = '';
+        if (reqUser === adminUser) {
             let adminSubToken = '';
-            try { const r = await db.prepare("SELECT val FROM sys_config WHERE key='admin_sub_token'").first(); if(r && r.val) adminSubToken = r.val; } catch(e){} 
+            try { const r = await db.prepare("SELECT val FROM sys_config WHERE key='admin_sub_token'").first(); if(r && r.val) adminSubToken = r.val; } catch(e){}
             isValid = !!adminSubToken && token === adminSubToken;
-        } 
-        else { 
-            const u = await db.prepare("SELECT password, sub_token FROM users WHERE username = ? AND enable = 1").bind(reqUser).first();
-            if (u) isValid = !!u.sub_token && token === u.sub_token;
+        }
+        else {
+            // 停用/过期不再直接 404，而是校验 token 通过后返回一个写明原因的假节点。
+            // 参考 3x-ui internal/sub/service.go:542 —— 用户没有账密面板可查，
+            // 客户端里这个节点名是他唯一的反馈渠道，直接返回空会让人误以为订阅坏了。
+            const u = await db.prepare("SELECT sub_token, enable, expire_time FROM users WHERE username = ?").bind(reqUser).first();
+            if (u && !!u.sub_token && token === u.sub_token) {
+                isValid = true;
+                const expire = Number(u.expire_time || 0);
+                if (Number(u.enable) !== 1) blockedReason = '已被管理员停用';
+                else if (expire > 0 && expire <= Date.now()) blockedReason = `已于 ${new Date(expire).toISOString().slice(0, 10)} 到期`;
+            }
         }
         
         // Invalid tokens deliberately look like absent endpoints. Protected
         // subscriptions return a harmless HTTP 200 profile before validation.
-        if (!isValid) return json({ error: "Not found" }, 404);
+        // 用 Response.json 而非 Pages Functions 的 json() helper —— 后者在本项目
+        // 没有任何定义（Workers 运行时不存在），调用会抛 ReferenceError → CF 1101。
+        if (!isValid) return Response.json({ error: "Not found" }, { status: 404 });
         
-        const now = Date.now(); 
-        let query; 
-        let sqlParams = [now];
-        
-        if (reqUser === adminUser) { 
-            query = `SELECT * FROM nodes WHERE enable = 1 AND (traffic_limit = 0 OR traffic_used < traffic_limit) AND (expire_time = 0 OR expire_time > ?) AND (username = ? OR username = 'admin')`; 
-            sqlParams.push(adminUser); 
-            if (ip) { query += " AND vps_ip = ?"; sqlParams.push(ip); } 
-        } else { 
+        const now = Date.now();
+        let query;
+        // 参数数组必须与 SQL 占位符一一对应，交给各分支自行赋值。
+        // 此前这里预置 [now]、管理员分支又 push(now)，绑定 2 个参数而 SQL 只有 1 个
+        // 占位符，D1 直接抛错 → 管理员订阅恒定 500（CF 侧状态 scriptThrewException）。
+        let sqlParams;
+
+        if (reqUser === adminUser) {
+        // 管理员订阅看全站：只按节点自身的启用/限额/过期过滤，不看归属。
+        // 此前这里带 (username = ? OR username = 'admin')，节点一旦全部过户给用户，
+        // 管理员订阅就查到 0 行 → Clash 输出空 proxies → 客户端判定「订阅无效」。
+        // 'admin' 是自建管理员上线前的历史字面量，现在的管理员名由 setup 决定，该分支恒假，直接删掉。
+        query = `SELECT * FROM nodes WHERE enable = 1 AND (traffic_limit = 0 OR traffic_used < traffic_limit) AND (expire_time = 0 OR expire_time > ?)`;
+        sqlParams = [now];
+        if (ip) { query += " AND vps_ip = ?"; sqlParams.push(ip); }
+        } else {
             query = `SELECT DISTINCT n.* FROM nodes n JOIN users u ON u.username = ? WHERE n.enable = 1 AND (n.traffic_limit = 0 OR n.traffic_used < n.traffic_limit) AND (n.expire_time = 0 OR n.expire_time > ?) AND u.enable = 1 AND (u.traffic_limit = 0 OR u.traffic_used < u.traffic_limit) AND (u.expire_time = 0 OR u.expire_time > ?) AND (n.username = u.username OR EXISTS (SELECT 1 FROM user_group_members gm JOIN user_group_resources gr ON gr.group_id = gm.group_id WHERE gm.username = u.username AND ((gr.resource_type = 'node' AND gr.resource_id = n.id) OR (gr.resource_type = 'vps' AND gr.resource_id = n.vps_ip))))`;
             sqlParams = [reqUser, now, now];
-            if (ip) { query += " AND n.vps_ip = ?"; sqlParams.push(ip); } 
+            if (ip) { query += " AND n.vps_ip = ?"; sqlParams.push(ip); }
         }
         
         const { results } = await db.prepare(query).bind(...sqlParams).all(); 
@@ -1335,8 +1447,52 @@ export async function onRequest(context) {
         let clashProxies = [];
         let proxyNames = [];
 
+        // 停用/过期用户：只返回一个指向本地无效端口的假节点，名字直接写明原因。
+        // 客户端会把它显示成一个连不上的节点，用户一眼能看出是"被停用"而不是"订阅坏了"。
+        if (blockedReason) {
+            const noticeName = `⛔${reqUser} | ${blockedReason}`;
+            const encoded = encodeURIComponent(noticeName);
+            subLinks.push(`socks5://${btoa("kui-blocked:0")}@127.0.0.1:1#${encoded}`);
+            // Clash 必须返回完整可解析的订阅结构：缺 proxies/proxy-groups/rules 会被
+            // 客户端判定为「订阅无效」而不是「节点被停用」，等于白做。所以这里与正常
+            // 分支保持同一套骨架，只把 proxies 换成一个指向本地废端口的提示节点。
+            if (format === 'clash') {
+                const noticeYaml = `port: 7890
+socks-port: 7891
+allow-lan: true
+mode: rule
+log-level: info
+ipv6: false
+external-controller: 127.0.0.1:9090
+
+proxies:
+  - name: ${yamlString(noticeName)}
+    type: socks5
+    server: 127.0.0.1
+    port: 1
+    username: "kui-blocked"
+    password: "0"
+    udp: true
+
+proxy-groups:
+  - name: "PROXY"
+    type: select
+    proxies:
+      - ${yamlString(noticeName)}
+      - DIRECT
+
+rules:
+  - MATCH,DIRECT
+`;
+                return new Response(noticeYaml, { headers: { 'content-type': 'text/yaml; charset=utf-8', 'content-disposition': 'attachment; filename=kui-clash.yaml' } });
+            }
+            // 普通订阅走 UTF-8 → base64；btoa 不能直接吃中文（节点名含 ⛔ 和中文原因），
+            // 必须先转成 latin1 可表示的字节序列，否则会抛 InvalidCharacterError → 500。
+            return new Response(btoa(unescape(encodeURIComponent(subLinks.join('\n')))), { headers: { 'content-type': 'text/plain; charset=utf-8' } });
+        }
+
         for (let node of results) {
-            const vpsInfo = await db.prepare("SELECT name FROM servers WHERE ip = ?").bind(node.vps_ip).first(); 
+            const vpsInfo = await db.prepare("SELECT name FROM servers WHERE ip = ?").bind(node.vps_ip).first();
             const rawRemark = `${vpsInfo ? vpsInfo.name : 'KUI'} | ${node.protocol}_${node.port}`; 
             const remark = encodeURIComponent(rawRemark); 
             let link = "";
@@ -1551,16 +1707,77 @@ rules:
         return new Response(btoa(unescape(encodeURIComponent(subLinks.join('\n')))), { headers: { "Content-Type": "text/plain; charset=utf-8" }});
     }
 
+    // ---- 首次初始化 ----
+    // 全新部署没有任何可用凭据，仓库里也不再预置默认账密：未初始化前 /api/setup 是
+    // 唯一的入口，设置完成后自动登录。initialized 为 true 时 POST 一律409，
+    // 因此不存在「初始化后还能被重新抢注」的窗口。
+    if (action === "setup" && (method === "GET" || method === "POST")) {
+        await ensureDbSchema(db);
+        if (method === "GET") {
+            const account = await adminAccount(db);
+            // 环境变量里配了凭据的旧部署视同已初始化，不给覆盖机会。
+            const legacy = !account && !!env.ADMIN_PASSWORD && !!(env.ADMIN_USERNAME ? String(env.ADMIN_USERNAME).trim() : '');
+            return Response.json({ initialized: !!account || legacy }, { headers: { "Cache-Control": "no-store" } });
+        }
+        const existing = await adminAccount(db);
+        const legacy = !existing && !!env.ADMIN_PASSWORD && !!(env.ADMIN_USERNAME ? String(env.ADMIN_USERNAME).trim() : '');
+        if (existing || legacy) return Response.json({ error: "Already initialized" }, { status: 409 });
+        let payload;
+        try { payload = await readJsonBody(request, 8 * 1024); } catch { payload = {}; }
+        const setupUser = String(payload.username || '').trim();
+        const setupPass = String(payload.password || '');
+        const confirm = String(payload.confirm || '');
+        if (!/^[A-Za-z0-9_.-]{1,64}$/.test(setupUser)) return Response.json({ error: 'Username must be 1-64 chars: letters, digits, dot, dash, underscore' }, { status: 400 });
+        if (setupPass.length < 12) return Response.json({ error: 'Password must be at least 12 characters' }, { status: 400 });
+        if (setupPass !== confirm) return Response.json({ error: 'Passwords do not match' }, { status: 400 });
+        if (setupUser.toLowerCase() === 'admin') return Response.json({ error: '用户名不能是 admin（该名字在订阅逻辑中被保留为管理员标识）' }, { status: 400 });
+        const hashed = await passwordHash(setupPass);
+        const hmacKey = await sessionToken();
+        // PRIMARY KEY id=1 + INSERT 让「只能初始化一次」由数据库保证，
+        // 不依赖先读后写的竞态判断（并发两个请求时后者必然主键冲突失败）。
+        let insertError = null;
+        try {
+            await db.prepare('INSERT INTO admin_credentials (id, username, password, hmac_key, updated_at) VALUES (1, ?, ?, ?, ?)').bind(setupUser, hashed, hmacKey, Date.now()).run();
+        } catch (e) {
+            insertError = e;
+        }
+        if (insertError) {
+            // 只有主键冲突才算「已被初始化」。其他错误（D1 类型/约束/配额）必须原样报出，
+            // 否则一次编码错误会被伪装成 409，让人以为是别人抢注了。
+            const message = String(insertError.message || insertError);
+            if (/UNIQUE constraint failed: admin_credentials\.id|PRIMARY KEY|D1_ERROR:.*constraint/i.test(message)) return Response.json({ error: "Already initialized" }, { status: 409 });
+            console.error('[setup] insert failed:', message);
+            return Response.json({ error: "Setup failed" }, { status: 500 });
+        }
+        // 抢占式部署已用环境变量定义过管理员时，把该用户名下的历史节点一并过户到新名字下。
+        // 必须显式做：管理员改名的瞬间，旧名既不等于新名、也不为空/'admin'，
+        // ensureDbSchema 里那套通用迁移扫不到它，而热踢名单靠 username !=管理员名排除，
+        // 漏掉会导致管理员自己的端口（含 443）被 iptables 封掉 → 全站失联。
+        const legacyName = env.ADMIN_USERNAME ? String(env.ADMIN_USERNAME).trim() : '';
+        if (legacyName && legacyName !== setupUser) {
+            try { await db.prepare('UPDATE nodes SET username = ? WHERE username = ?').bind(setupUser, legacyName).run(); } catch (e) {}
+        }
+        try { await db.prepare("UPDATE nodes SET username = ? WHERE username = 'admin' OR username IS NULL OR username = ''").bind(setupUser).run(); } catch (e) {}
+        const token = await sessionToken();
+        await db.prepare('INSERT INTO auth_sessions (token_hash, username, expires_at) VALUES (?, ?, ?)').bind(await sha256(token), setupUser, Date.now() + 12 * 60 * 60 * 1000).run();
+        return Response.json({ success: true, token, username: setupUser, role: 'admin' }, { headers: { "Cache-Control": "no-store" } });
+    }
+
     if (action === "login" && method === "POST") {
         await ensureDbSchema(db);
         if (!(await loginAllowed(db, request))) return Response.json({ error: "Too many attempts" }, { status: 429, headers: { 'Retry-After': '900' } });
         let credentials;
         try { credentials = await readJsonBody(request, 8 * 1024); } catch { credentials = {}; }
         const username = String(credentials.username || '').trim(); const password = String(credentials.password || '');
+        const adminAccountNow = await adminAccount(db);
+        const adminNameNow = adminAccountNow ? adminAccountNow.username : (env.ADMIN_USERNAME ? String(env.ADMIN_USERNAME).trim() : '');
         let valid = false;
-        if (username === (env.ADMIN_USERNAME || 'admin')) valid = password.length > 0 && password === env.ADMIN_PASSWORD;
-        else { const user = await db.prepare('SELECT password FROM users WHERE username = ? AND enable = 1').bind(username).first(); valid = !!user && await passwordMatches(password, user.password); if (valid && /^[0-9a-f]{64}$/i.test(user.password || '')) await db.prepare('UPDATE users SET password = ? WHERE username = ?').bind(await passwordHash(password), username).run(); }
-        if (valid) { const token = await sessionToken(); await db.prepare('INSERT INTO auth_sessions (token_hash, username, expires_at) VALUES (?, ?, ?)').bind(await sha256(token), username, Date.now() + 12 * 60 * 60 * 1000).run(); context.waitUntil(db.prepare('DELETE FROM auth_sessions WHERE expires_at < ?').bind(Date.now()).run().catch(() => {})); await db.prepare('DELETE FROM login_throttles WHERE key = ?').bind(loginThrottleKey(request)).run(); return Response.json({ success: true, token, role: username === (env.ADMIN_USERNAME || "admin") ? 'admin' : 'user' }); }
+        // 未初始化时不接受任何登录，必须先走 /api/setup 设置管理员。
+        if (adminNameNow && username === adminNameNow) {
+            if (adminAccountNow) valid = password.length > 0 && await passwordMatches(password, adminAccountNow.password);
+            else valid = password.length > 0 && !!env.ADMIN_PASSWORD && password === env.ADMIN_PASSWORD;
+        } else { const user = await db.prepare('SELECT password FROM users WHERE username = ? AND enable = 1').bind(username).first(); valid = !!user && await passwordMatches(password, user.password); if (valid && /^[0-9a-f]{64}$/i.test(user.password || '')) await db.prepare('UPDATE users SET password = ? WHERE username = ?').bind(await passwordHash(password), username).run(); }
+        if (valid) { const token = await sessionToken(); await db.prepare('INSERT INTO auth_sessions (token_hash, username, expires_at) VALUES (?, ?, ?)').bind(await sha256(token), username, Date.now() + 12 * 60 * 60 * 1000).run(); context.waitUntil(db.prepare('DELETE FROM auth_sessions WHERE expires_at < ?').bind(Date.now()).run().catch(() => {})); await db.prepare('DELETE FROM login_throttles WHERE key = ?').bind(loginThrottleKey(request)).run(); return Response.json({ success: true, token, role: username === adminNameNow ? 'admin' : 'user' }); }
         await recordLoginFailure(db, request);
         return Response.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -1568,12 +1785,12 @@ rules:
     if (action === "realtime_auth" && method === "POST") {
         await ensureDbSchema(db);
         const username = await verifyAuth(request.headers.get("Authorization"), request, db, env, context);
-        const isAdminUser = username === (env.ADMIN_USERNAME || "admin");
+        const isAdminUser = !!username && username === (await adminName(db, env));
         return Response.json({ success: isAdminUser, admin: isAdminUser }, { status: isAdminUser ? 200 : 403, headers: { "Cache-Control": "no-store" } });
     }
 
     const currentUser = await verifyAuth(request.headers.get("Authorization"), request, db, env, context);
-    const isAdmin = currentUser === (env.ADMIN_USERNAME || "admin");
+    const isAdmin = !!currentUser && currentUser === (await adminName(db, env));
     if (!currentUser) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
     try {
@@ -1589,8 +1806,11 @@ rules:
                     }
                 }
             }
+            // 历史节点归属用的是字面量 'admin'，ensureDbSchema 里已做通用迁移（每次请求都跑，且
+            // 在 /api/setup 之后，管理员一旦自建名就立即生效），此处不再重复一次性迁移。
             const nodes = isAdmin ? (await db.prepare("SELECT * FROM nodes").all()).results : (await db.prepare("SELECT DISTINCT n.* FROM nodes n WHERE n.username = ? OR EXISTS (SELECT 1 FROM user_group_members gm JOIN user_group_resources gr ON gr.group_id = gm.group_id WHERE gm.username = ? AND ((gr.resource_type = 'node' AND gr.resource_id = n.id) OR (gr.resource_type = 'vps' AND gr.resource_id = n.vps_ip)))").bind(currentUser, currentUser).all()).results;
-            const users = isAdmin ? (await db.prepare("SELECT * FROM users").all()).results : (await db.prepare("SELECT * FROM users WHERE username = ?").bind(currentUser).all()).results;
+            // 列白名单：不把 password 哈希下发到浏览器（用户已改为无账密模式，只需订阅令牌）。
+            const users = isAdmin ? (await db.prepare("SELECT username, sub_token, enable, traffic_limit, traffic_used, expire_time FROM users ORDER BY username").all()).results : (await db.prepare("SELECT username, sub_token, enable, traffic_limit, traffic_used, expire_time FROM users WHERE username = ?").bind(currentUser).all()).results;
             const groups = isAdmin ? (await db.prepare("SELECT g.*, COALESCE((SELECT json_group_array(username) FROM user_group_members WHERE group_id = g.id), '[]') AS members, COALESCE((SELECT json_group_array(json_object('type', resource_type, 'id', resource_id)) FROM user_group_resources WHERE group_id = g.id), '[]') AS resources FROM user_groups g ORDER BY g.name").all()).results : [];
             let siteTitle = "Cluster Gateway"; try { const r = await db.prepare("SELECT val FROM sys_config WHERE key='site_title'").first(); if(r && r.val) siteTitle = r.val; } catch(e){}
             let mySubToken = "";
@@ -1619,14 +1839,36 @@ rules:
             await db.batch(statements);
             return Response.json({ success: true });
         }
-        if (action === "user" && params.path[1] === "password" && method === "PUT") { const { password } = await readJsonBody(request, 8 * 1024); if (isAdmin) return Response.json({error: "管理员密码受绝对安全保护，仅可通过 Cloudflare Pages 环境变量修改！"}, {status: 400}); if (String(password || '').length < 12) return Response.json({ error: 'Password must be at least 12 characters' }, { status: 400 }); await db.prepare("UPDATE users SET password = ? WHERE username = ?").bind(await passwordHash(password), currentUser).run(); return Response.json({ success: true }); }
+        if (action === "user" && params.path[1] === "password" && method === "PUT") { const { password } = await readJsonBody(request, 8 * 1024); const current = String(password || '');
+        // 管理员凭据存在 admin_credentials，自建后必须能在面板内改密码（不再依赖环境变量）。
+        if (isAdmin) {
+            if (current.length < 12) return Response.json({ error: 'Password must be at least 12 characters' }, { status: 400 });
+            await db.prepare('UPDATE admin_credentials SET password = ?, hmac_key = ?, updated_at = ? WHERE id = 1').bind(await passwordHash(current), await sessionToken(), Date.now()).run();
+            await db.prepare('DELETE FROM auth_sessions WHERE username = ?').bind(currentUser).run();
+            return Response.json({ success: true });
+        }
+        if (current.length < 12) return Response.json({ error: 'Password must be at least 12 characters' }, { status: 400 }); await db.prepare("UPDATE users SET password = ? WHERE username = ?").bind(await passwordHash(current), currentUser).run(); return Response.json({ success: true }); }
         if (action === "user" && params.path[1] === "sub_token" && method === "PUT") { const newToken = crypto.randomUUID(); if (isAdmin) await db.prepare("INSERT OR REPLACE INTO sys_config (key, val, ts) VALUES ('admin_sub_token', ?, ?)").bind(newToken, Date.now()).run(); else await db.prepare("UPDATE users SET sub_token = ? WHERE username = ?").bind(newToken, currentUser).run(); return Response.json({ success: true, token: newToken }); }
         if (action === "stats" && method === "GET" && isAdmin) { const query = `SELECT strftime('%m-%d', datetime(timestamp / 1000, 'unixepoch', 'localtime')) as day, SUM(delta_bytes) as total_bytes FROM traffic_stats WHERE ip = ? AND timestamp > ? GROUP BY day ORDER BY day ASC`; const { results } = await db.prepare(query).bind(new URL(request.url).searchParams.get("ip"), Date.now() - 604800000).all(); return Response.json(results || []); }
         
         if (action === "users" && isAdmin) {
-            if (method === "POST") { const { username, password, traffic_limit, expire_time } = await readJsonBody(request, 16 * 1024); const safeUser = String(username || '').trim(); if (!/^[A-Za-z0-9_.-]{1,64}$/.test(safeUser) || safeUser === (env.ADMIN_USERNAME || 'admin')) return Response.json({ error: 'Invalid or reserved username' }, { status: 400 }); if (String(password || '').length < 12) return Response.json({ error: 'Password must be at least 12 characters' }, { status: 400 }); if (await db.prepare("SELECT username FROM users WHERE username = ?").bind(safeUser).first()) return Response.json({ error: "User already exists" }, { status: 409 }); const hash = await passwordHash(password); const subToken = crypto.randomUUID(); await db.prepare("INSERT INTO users (username, password, traffic_limit, expire_time, sub_token) VALUES (?, ?, ?, ?, ?)").bind(safeUser, hash, Math.max(0, Number(traffic_limit)||0), Math.max(0, Number(expire_time)||0), subToken).run(); return Response.json({ success: true }); }
-            if (method === "PUT") { const { username, enable, reset_traffic } = await request.json(); const statements = []; if (reset_traffic) statements.push(db.prepare("UPDATE users SET traffic_used = 0 WHERE username = ?").bind(username)); if (enable !== undefined) statements.push(db.prepare("UPDATE users SET enable = ? WHERE username = ?").bind(enable, username)); if (statements.length) await db.batch(statements); return Response.json({ success: true }); }
-            if (method === "DELETE") { const target = new URL(request.url).searchParams.get("username"); await db.batch([db.prepare("DELETE FROM user_group_members WHERE username = ?").bind(target), db.prepare("DELETE FROM users WHERE username = ?").bind(target), db.prepare("UPDATE nodes SET username = ? WHERE username = ?").bind(currentUser, target)]); return Response.json({ success: true }); }
+            // 建号不需要账密：密码留空即可，用户只靠一条独立订阅链接区分。
+            // traffic_limit / expire_time 字段保留（本期 UI 隐藏），以便后续接入流量统计时无需改表。
+            if (method === "POST") { const { username } = await readJsonBody(request, 16 * 1024); const safeUser = String(username || '').trim();
+            // 必须挡住当前管理员名：管理员不是 users 表里的记录，其节点在 LEFT JOIN 下与
+            // 已删除用户的节点同样呈现为 u.username IS NULL，热踢名单靠 username 排除管理员，
+            // 一旦重名，该用户的节点会被当成管理员节点对所有人下发、且永不被封。
+            if (!/^[A-Za-z0-9_.-]{1,64}$/.test(safeUser) || safeUser === currentUser) return Response.json({ error: 'Invalid or reserved username' }, { status: 400 }); if (await db.prepare("SELECT username FROM users WHERE username = ?").bind(safeUser).first()) return Response.json({ error: "User already exists" }, { status: 409 }); const subToken = crypto.randomUUID(); await db.prepare("INSERT INTO users (username, password, sub_token) VALUES (?, ?, ?)").bind(safeUser, crypto.randomUUID(), subToken).run(); return Response.json({ success: true, token: subToken }); }
+            // 停用/启用是「热踢」的开关：置enable=0 后订阅立刻 404、节点从所有 VPS 撤下，
+            // 同时通知各 VPS agent 用 iptables DROP 该用户名下所有节点端口（无需重启 sing-box）。
+            if (method === "PUT") { const { username, enable } = await request.json(); if (!username) return Response.json({ error: 'username required' }, { status: 400 }); if (enable === undefined) return Response.json({ error: 'enable required' }, { status: 400 }); await db.prepare("UPDATE users SET enable = ? WHERE username = ?").bind(enable ? 1 : 0, username).run(); const affectedIps = (await db.prepare("SELECT DISTINCT vps_ip AS ip FROM nodes WHERE username = ?").bind(username).all()).results.map(r => r.ip); for (const ip of affectedIps) context.waitUntil(notifyRealtimeVps(env, db, ip).catch(() => {})); return Response.json({ success: true, affected_servers: affectedIps.length }); }
+            // 删用户必须同时回收 nodes.username，否则节点页会一直显示「归属 <已删用户>」：
+            // DELETE 只删 users / user_group_members 两张表，节点页直接读 nodes.username 渲染。
+            // 回收后的节点归属回到当前管理员，与 PATCH 取消勾选时的行为一致。
+            if (method === "DELETE") { const target = new URL(request.url).searchParams.get("username"); const affectedIps = (await db.prepare("SELECT DISTINCT vps_ip AS ip FROM nodes WHERE username = ?").bind(target).all()).results.map(r => r.ip); await db.batch([db.prepare("DELETE FROM user_group_members WHERE username = ?").bind(target), db.prepare("UPDATE nodes SET username = ? WHERE username = ?").bind(currentUser, target), db.prepare("DELETE FROM users WHERE username = ?").bind(target)]); for (const ip of affectedIps) context.waitUntil(notifyRealtimeVps(env, db, ip).catch(() => {})); return Response.json({ success: true }); }
+            // 用户行内直接改节点归属（替代原「用户组」机制：组要建组+勾成员+勾资源三步，
+            // 且组员流量记在节点归属人头上导致限额永远不准）。逐个节点写 username。
+            if (method === "PATCH") { const { username, nodes: nodeList } = await request.json(); if (!username || !Array.isArray(nodeList)) return Response.json({ error: 'username and nodes[] required' }, { status: 400 }); if (username === currentUser) return Response.json({ error: 'Cannot reassign admin-owned nodes' }, { status: 400 }); const owned = (await db.prepare("SELECT id FROM nodes WHERE username = ?").bind(username).all()).results.map(r => r.id); const target = nodeList.map(id => String(id)).filter(id => /^[A-Za-z0-9_-]{1,64}$/.test(id)); const release = owned.filter(id => !target.includes(id)); const stmts = []; for (const id of release) stmts.push(db.prepare("UPDATE nodes SET username = ? WHERE id = ?").bind(currentUser, id)); for (const id of target) stmts.push(db.prepare("UPDATE nodes SET username = ? WHERE id = ? AND username != ?").bind(username, id, username)); if (stmts.length) await chunkBatch(db, stmts, 100); const touchedIds = [...new Set(release.concat(target))]; let affectedIps = []; if (touchedIds.length) { for (let i = 0; i < touchedIds.length; i += 80) { const slice = touchedIds.slice(i, i + 80); const rows = await db.prepare(`SELECT DISTINCT vps_ip AS ip FROM nodes WHERE id IN (${slice.map(() => '?').join(',')})`).bind(...slice).all(); affectedIps.push(...(rows.results || []).map(r => r.ip)); } } affectedIps = [...new Set(affectedIps)]; for (const ip of affectedIps) context.waitUntil(notifyRealtimeVps(env, db, ip).catch(() => {})); return Response.json({ success: true, affected_servers: affectedIps.length }); }
         }
 
         if (action === "groups" && isAdmin) {
@@ -1677,13 +1919,16 @@ rules:
             if (method === "PUT") { const data = await request.json(); const ip = data.ip; if (!ip) return Response.json({ error: 'IP required' }, { status: 400 }); if (data.egress_mode === undefined) return Response.json({ error: 'Use egress_mode to configure node egress' }, { status: 400 }); const modes = ['native', 'residential', 'warp_ipv4', 'warp_ipv6', 'warp_dual', 'socks5']; if (!modes.includes(data.egress_mode)) return Response.json({ error: 'Invalid egress mode' }, { status: 400 }); if (data.egress_mode === 'residential' && env.PROXY_CTRL_URL) return Response.json({ error: '外部住宅控制器模式不支持本机住宅节点出口' }, { status: 409 }); if (data.egress_mode === 'residential' && (!env.PROXY_USER || !env.PROXY_PASS)) return Response.json({ error: 'Pages 未配置住宅代理凭据' }, { status: 503 }); const proxyMode = data.proxy_mode === 'selective' ? 'selective' : 'global'; const proxyCategories = data.proxy_categories ? String(data.proxy_categories) : ''; const socks5Addr = String(data.socks5_addr || '').slice(0, 128); const socks5Port = Math.min(65535, Math.max(1, Number(data.socks5_port) || 0)); const socks5User = String(data.socks5_user || '').slice(0, 64); const socks5Pass = String(data.socks5_pass || '').slice(0, 128); let changed; if (data.egress_mode === 'socks5' && socks5Addr && socks5Port) { changed = await db.prepare("UPDATE servers SET egress_mode = ?, egress_revision = egress_revision + 1, egress_status = 'pending', egress_error = '', proxy_mode = ?, proxy_categories = ?, socks5_addr = ?, socks5_port = ?, socks5_user = ?, socks5_pass = ? WHERE ip = ? RETURNING egress_revision").bind(data.egress_mode, proxyMode, proxyCategories, socks5Addr, socks5Port, socks5User, socks5Pass, ip).first(); } else { changed = await db.prepare("UPDATE servers SET egress_mode = ?, egress_revision = egress_revision + 1, egress_status = 'pending', egress_error = '', proxy_mode = ?, proxy_categories = ? WHERE ip = ? RETURNING egress_revision").bind(data.egress_mode, proxyMode, proxyCategories, ip).first(); } if (!changed) return Response.json({ error: 'VPS not found' }, { status: 404 }); context.waitUntil(notifyRealtimeVps(env, db, ip).catch(() => {})); return Response.json({ success: true, ip, egress_mode: data.egress_mode, egress_revision: Number(changed.egress_revision), egress_status: 'pending', proxy_mode: proxyMode, proxy_categories: proxyCategories, socks5_addr: data.egress_mode === 'socks5' ? socks5Addr : '', socks5_port: data.egress_mode === 'socks5' ? socks5Port : 0 }); }
             if (method === "DELETE") { 
                 const ip = new URL(request.url).searchParams.get("ip"); 
-                await db.batch([ db.prepare("DELETE FROM user_group_resources WHERE resource_type = 'vps' AND resource_id = ?").bind(ip), db.prepare("DELETE FROM user_group_resources WHERE resource_type = 'node' AND resource_id IN (SELECT id FROM nodes WHERE vps_ip = ?)").bind(ip), db.prepare("DELETE FROM nodes WHERE vps_ip = ?").bind(ip), db.prepare("DELETE FROM traffic_stats WHERE ip = ?").bind(ip), db.prepare("DELETE FROM servers WHERE ip = ?").bind(ip), db.prepare("DELETE FROM probe_servers WHERE id = ?").bind(ip), db.prepare("DELETE FROM proxy_ctrl_servers WHERE ip = ?").bind(ip), db.prepare("DELETE FROM server_logs WHERE ip = ?").bind(ip), db.prepare("DELETE FROM probe_settings WHERE key = ?").bind(`proxy_slot_map_${ip}`) ]);
+                await db.batch([ db.prepare("INSERT OR REPLACE INTO retired_agent_tokens (token, ip, retired_at) SELECT agent_token, ip, ? FROM servers WHERE ip = ? AND agent_token IS NOT NULL").bind(Date.now(), ip), db.prepare("DELETE FROM retired_agent_tokens WHERE retired_at < ?").bind(Date.now() - 30 * 86400000), db.prepare("DELETE FROM user_group_resources WHERE resource_type = 'vps' AND resource_id = ?").bind(ip), db.prepare("DELETE FROM user_group_resources WHERE resource_type = 'node' AND resource_id IN (SELECT id FROM nodes WHERE vps_ip = ?)").bind(ip), db.prepare("DELETE FROM nodes WHERE vps_ip = ?").bind(ip), db.prepare("DELETE FROM traffic_stats WHERE ip = ?").bind(ip), db.prepare("DELETE FROM servers WHERE ip = ?").bind(ip), db.prepare("DELETE FROM probe_servers WHERE id = ?").bind(ip), db.prepare("DELETE FROM proxy_ctrl_servers WHERE ip = ?").bind(ip), db.prepare("DELETE FROM server_logs WHERE ip = ?").bind(ip), db.prepare("DELETE FROM probe_settings WHERE key = ?").bind(`proxy_slot_map_${ip}`) ]);
                 return Response.json({ success: true }); 
             }
         }
 
         if (action === "nodes" && isAdmin) {
-            if (method === "POST") { const n = await request.json(); const protocols = ['VLESS','XTLS-Reality','Reality','Hysteria2','TUIC','Trojan','H2-Reality','gRPC-Reality','AnyTLS','Naive','Socks5','VLESS-Argo','dokodemo-door']; if (!/^[A-Za-z0-9_-]{1,64}$/.test(String(n.id || ''))) return Response.json({ error: 'Invalid node id' }, { status: 400 }); if (!protocols.includes(n.protocol)) return Response.json({ error: 'Invalid protocol' }, { status: 400 }); if (!Number.isInteger(Number(n.port)) || Number(n.port) < 1 || Number(n.port) > 65535) return Response.json({ error: 'Invalid port' }, { status: 400 }); if (!(await db.prepare('SELECT ip FROM servers WHERE ip = ?').bind(n.vps_ip).first())) return Response.json({ error: 'VPS not found' }, { status: 404 }); if (n.protocol === 'dokodemo-door') { if (!['internal','external'].includes(n.relay_type)) return Response.json({error:'Invalid relay type'},{status:400}); if (n.relay_type === 'external' && (!String(n.target_ip||'').trim() || !Number.isInteger(Number(n.target_port)) || Number(n.target_port)<1 || Number(n.target_port)>65535)) return Response.json({error:'Invalid relay target'},{status:400}); if (n.relay_type === 'internal' && !(await db.prepare('SELECT id FROM nodes WHERE id = ? AND vps_ip = ?').bind(n.target_id,n.vps_ip).first())) return Response.json({error:'Internal relay target not found on VPS'},{status:400}); } if (await db.prepare("SELECT id FROM nodes WHERE id = ?").bind(n.id).first()) return Response.json({ error: "Node already exists" }, { status: 409 }); let nodeUser = n.username || currentUser; if (nodeUser === 'admin') nodeUser = currentUser; await db.prepare(`INSERT INTO nodes (id, uuid, vps_ip, protocol, port, sni, private_key, public_key, short_id, relay_type, target_ip, target_port, target_id, enable, traffic_used, traffic_limit, expire_time, username, network) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(n.id, n.uuid, n.vps_ip, n.protocol, Number(n.port), n.sni||null, n.private_key||null, n.public_key||null, n.short_id||null, n.relay_type||null, n.target_ip||null, n.target_port||null, n.target_id||null, 1, 0, Math.max(0, Number(n.traffic_limit)||0), Math.max(0, Number(n.expire_time)||0), nodeUser, n.network||'tcp').run(); context.waitUntil(notifyRealtimeVps(env, db, n.vps_ip).catch(()=>{})); return Response.json({ success: true }); }
+            if (method === "POST") { const n = await request.json(); const protocols = ['VLESS','XTLS-Reality','Reality','Hysteria2','TUIC','Trojan','H2-Reality','gRPC-Reality','AnyTLS','Naive','Socks5','VLESS-Argo','dokodemo-door']; if (!/^[A-Za-z0-9_-]{1,64}$/.test(String(n.id || ''))) return Response.json({ error: 'Invalid node id' }, { status: 400 }); if (!protocols.includes(n.protocol)) return Response.json({ error: 'Invalid protocol' }, { status: 400 }); if (!Number.isInteger(Number(n.port)) || Number(n.port) < 1 || Number(n.port) > 65535) return Response.json({ error: 'Invalid port' }, { status: 400 }); if (!(await db.prepare('SELECT ip FROM servers WHERE ip = ?').bind(n.vps_ip).first())) return Response.json({ error: 'VPS not found' }, { status: 404 }); if (n.protocol === 'dokodemo-door') { if (!['internal','external'].includes(n.relay_type)) return Response.json({error:'Invalid relay type'},{status:400}); if (n.relay_type === 'external' && (!String(n.target_ip||'').trim() || !Number.isInteger(Number(n.target_port)) || Number(n.target_port)<1 || Number(n.target_port)>65535)) return Response.json({error:'Invalid relay target'},{status:400}); if (n.relay_type === 'internal' && !(await db.prepare('SELECT id FROM nodes WHERE id = ? AND vps_ip = ?').bind(n.target_id,n.vps_ip).first())) return Response.json({error:'Internal relay target not found on VPS'},{status:400}); } if (await db.prepare("SELECT id FROM nodes WHERE id = ?").bind(n.id).first()) return Response.json({ error: "Node already exists" }, { status: 409 }); let nodeUser = n.username || currentUser; if (nodeUser === 'admin') nodeUser = currentUser; await db.prepare(`INSERT INTO nodes (id, uuid, vps_ip, protocol, port, sni, private_key, public_key, short_id, relay_type, target_ip, target_port, target_id, enable, traffic_used, traffic_limit, expire_time, username, network) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(n.id, n.uuid, n.vps_ip, n.protocol, Number(n.port), n.sni||null, n.private_key||null, n.public_key||null, n.short_id||null, n.relay_type||null, n.target_ip||null, n.target_port||null, n.target_id||null, 1, 0, Math.max(0, Number(n.traffic_limit)||0), Math.max(0, Number(n.expire_time)||0), nodeUser, n.network||'tcp').run();
+                // 保证管理员的全站订阅里始终包含这个新节点。
+                const grantTargets = [...new Set([nodeUser, currentUser])];
+                context.waitUntil(notifyRealtimeVps(env, db, n.vps_ip).catch(()=>{})); return Response.json({ success: true }); }
             if (method === "PUT") { const { id, enable, reset_traffic } = await request.json(); const node = await db.prepare('SELECT vps_ip FROM nodes WHERE id = ?').bind(id).first(); if (!node) return Response.json({ error: 'Node not found' }, { status: 404 }); const statements = []; if (reset_traffic) statements.push(db.prepare("UPDATE nodes SET traffic_used = 0 WHERE id = ?").bind(id)); if (enable !== undefined) statements.push(db.prepare("UPDATE nodes SET enable = ? WHERE id = ?").bind(enable ? 1 : 0, id)); if (statements.length) await db.batch(statements); context.waitUntil(notifyRealtimeVps(env, db, node.vps_ip).catch(()=>{})); return Response.json({ success: true }); }
             if (method === "DELETE") { const id = new URL(request.url).searchParams.get("id"); const node = await db.prepare('SELECT vps_ip FROM nodes WHERE id = ?').bind(id).first(); await db.batch([db.prepare("DELETE FROM user_group_resources WHERE resource_type = 'node' AND resource_id = ?").bind(id), db.prepare("DELETE FROM nodes WHERE id = ?").bind(id)]); if (node) context.waitUntil(notifyRealtimeVps(env, db, node.vps_ip).catch(()=>{})); return Response.json({ success: true }); }
         }

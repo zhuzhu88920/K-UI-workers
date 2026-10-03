@@ -71,14 +71,24 @@ KUI 是一个部署在 **单一 Cloudflare Worker** 的代理节点管理与服�
 - 确认编辑器中的代码与实际仓库代码一致
 - 如不一致，手动将 `src/worker.js` 内容复制进去，保存并重新部署
 
-预设登录信息：
+### ⑤ 首次打开面板：设置管理员
 
-```text
-用户名：admin
-密码：admin
-```
+仓库**不预置任何默认账密**。部署完成后首次打开面板会进入「初始化管理员」页面：
 
-这是为完整一键部署准备的默认值。首次登录后必须在 Worker 的 **Settings → Variables and Secrets** 将 `ADMIN_PASSWORD` 覆盖为强 Secret 并重新部署。
+- 用户名：字母 / 数字 / 点 / 横线 / 下划线，**不能是 `admin`**（该名字在订阅 SQL 里被保留为管理员标识）
+- 密码：至少 12 位，需输入两次确认
+
+提交后自动登录。管理员凭据以 PBKDF2-SHA256（10 万次迭代）哈希存入 D1 的 `admin_credentials` 表，**明文不落库、不进代码仓库**。
+
+`POST /api/setup` 只能成功一次（数据库主键约束保证），初始化完成后重复调用返回 409。
+
+> ⚠️ 初始化窗口：实例部署好到首次完成初始化之间，任何能访问该域名的人都可以抢先完成初始化并成为管理员。建议部署后立刻完成这一步；绑定自定义域名的实例尤其需要注意。
+
+管理员可在面板内随时修改自己的密码。修改会同时轮换内部 HMAC 密钥并清空该账号的所有登录会话。
+
+#### 用环境变量接管（可选）
+
+若不想走面板初始化（例如希望用 CI 注入凭据），可在 `wrangler.jsonc` 填 `ADMIN_USERNAME`，并执行 `npx wrangler secret put ADMIN_PASSWORD`。两者齐备时面板视为**已初始化**，不再显示初始化页，也不会被他人抢占。
 
 内置住宅代理也已预设凭据：
 
@@ -166,7 +176,8 @@ Cloudflare Worker
 
 ## 注意事项
 
-- 一键部署默认使用 `admin/admin` 和住宅代理凭据 `kui/kui`。公开使用前必须将 `ADMIN_PASSWORD`、`PROXY_USER`、`PROXY_PASS` 覆盖为 Secret。
+- 仓库不预置管理员账密：首次打开面板必须完成「初始化管理员」，否则所有接口返回 401。**部署后请立刻完成，避免初始化窗口被他人抢占。**
+- 住宅代理凭据仍预设 `kui/kui`，公开使用前必须将 `PROXY_USER`、`PROXY_PASS` 覆盖为 Secret。
 - 不要提交自定义 `ADMIN_PASSWORD`、D1 ID、Telegram Token 或代理凭据。
 - `DB` 是固定 binding 名称，修改会导致后端无法访问数据库。
 - 修改 Worker Variables 或 Bindings 后需要重新部署。

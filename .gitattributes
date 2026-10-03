@@ -1,0 +1,5 @@
+# 这些文件会被下发到 Linux VPS 上执行，CRLF 会让 bash 报 `$'\r': command not found`
+# 并直接打断安装流程，因此强制以 LF 提交与检出。
+*.sh text eol=lf
+*.py text eol=lf
+*.bash text eol=lf

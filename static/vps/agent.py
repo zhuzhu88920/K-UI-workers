@@ -104,6 +104,7 @@ last_update_check = 0
 # 🌟 住宅IP代理配置缓存
 current_proxy_config = {}
 proxy_port_conflict = None
+last_skipped_nodes = []
 
 def persist_agent_token(token):
     global TOKEN, HEADERS
@@ -391,6 +392,9 @@ def check_for_update():
 # Durable Objects switch routine metric snapshots to a lower rate.
 REALTIME_STATUS_ACTIVE_INTERVAL = 5
 REALTIME_STATUS_IDLE_INTERVAL = 30
+# Upper bound for server-requested heartbeat intervals. Without this the panel's
+# "idle" setting was silently clamped to 30s, so 60/120/300/600 had no effect.
+REALTIME_STATUS_MAX_INTERVAL = 600
 realtime_status_interval = REALTIME_STATUS_ACTIVE_INTERVAL
 global_interval = REALTIME_STATUS_ACTIVE_INTERVAL
 fast_mode = False
@@ -436,6 +440,31 @@ def run_text(command, timeout=5):
         return result.stdout.strip()
     except Exception:
         return ""
+
+def foreign_listeners():
+    """Return the set of (transport, port) tuples held by OTHER processes.
+
+    Ports held by our own sing-box are excluded: during a config rebuild the old
+    sing-box is still running, so its listeners are expected, not conflicts.
+    """
+    conflicted = set()
+    try:
+        out = run_text("ss -Hlntp 2>/dev/null; ss -Hlnup 2>/dev/null", timeout=10)
+    except Exception:
+        return conflicted
+    for line in out.splitlines():
+        if "sing-box" in line:
+            continue
+        cols = line.split()
+        if len(cols) < 5:
+            continue
+        transport = "udp" if line.startswith("udp") else "tcp"
+        try:
+            port = int(cols[4].rsplit(":", 1)[1])
+        except (ValueError, IndexError):
+            continue
+        conflicted.add((transport, port))
+    return conflicted
 
 def get_static_sysinfo():
     global cached_os, cached_arch, cached_cpu_info, cached_virt
@@ -498,6 +527,90 @@ def get_net_dev_bytes():
         return rx, tx
     except: pass
     return 0, 0
+
+# 标记我们自己插入的 DROP 规则，便于「恢复」时精确删除，避免误删人工规则。
+BLOCK_MARK = "KUI-BLOCK"
+BLOCKED_PORTS_FILE = "/opt/kui/blocked-ports.json"
+
+def _block_args(binary, action, port, transport):
+    """构造 iptables 参数。
+
+    插入用 -I INPUT 1（置顶，确保先于 ensure_firewall_open 的 ACCEPT 匹配到），
+    但探测/删除必须用同一套参数，且不能带位置序号 —— iptables 的 -C/-D 按规则内容
+    匹配，多一个 "1" 就会探测不到，导致解除封锁时规则删不掉。所以序号只在 -I 时传。
+    """
+    args = [binary, action, "INPUT"]
+    if action == "-I":
+        args.append("1")
+    args += ["-p", transport, "--dport", str(port), "-m", "comment", "--comment", BLOCK_MARK, "-j", "DROP"]
+    return args
+
+def _ipt_run(args):
+    """返回 iptables 命令退出码（非0 表示规则不存在或失败），静默无输出。"""
+    try:
+        return subprocess.run(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8).returncode
+    except Exception:
+        return 1
+
+def apply_port_blocklist(blocked_ports):
+    """按面板下发的停用名单，用 iptables DROP 掉对应端口。
+
+    热踢的关键实现：每个节点 = 一个独立 inbound = 一个独立端口，所以直接封端口
+    即可秒级断联，且完全不必重启 sing-box（同机其他用户不受任何影响）。
+
+    - DROP 规则用-I 插到 ensure_firewall_open 的 ACCEPT 之前，保证先匹配到拒绝。
+    - 幂等：先-C 判存在再插入；恢复时先-D 删净再按新名单重建。
+    - 落盘到 BLOCKED_PORTS_FILE，因为 VPS 重启会清空 iptables，启动时需重放。
+    """
+    wanted = set()
+    for item in blocked_ports or []:
+        try:
+            port = int(item.get("port"))
+            transport = "udp" if item.get("transport") == "udp" else "tcp"
+        except Exception:
+            continue
+        if 1 <= port <= 65535:
+            wanted.add((port, transport))
+
+    previous = set()
+    try:
+        if os.path.exists(BLOCKED_PORTS_FILE):
+            with open(BLOCKED_PORTS_FILE, "r", encoding="utf-8") as f:
+                previous = {(int(x["port"]), x.get("transport", "tcp")) for x in json.load(f) if isinstance(x, dict) and x.get("port")}
+    except Exception:
+        previous = set()
+
+    # 先清理上次生效、这次不在名单里的（用户被恢复启用 / 节点改回归属）
+    for port, transport in previous - wanted:
+        for binary in ("iptables", "ip6tables"):
+            while True:
+                probe = _ipt_run(_block_args(binary, "-C", port, transport))
+                if probe != 0:
+                    break
+                _ipt_run(_block_args(binary, "-D", port, transport))
+
+    # 名单内的端口一律「先-C 探测、缺失才-I 插入」。
+    # 注意：这里必须逐个探测而不是只处理 wanted - previous —— VPS 重启会清空
+    # iptables 但不会删掉落盘文件，此时 previous == wanted，若按差集插入等于什么都不做，
+    # 停用用户会在重启后恢复连通。逐个探测让规则自愈，也天然保证幂等。
+    for port, transport in wanted:
+        for binary in ("iptables", "ip6tables"):
+            if _ipt_run(_block_args(binary, "-C", port, transport)) == 0:
+                continue
+            _ipt_run(_block_args(binary, "-I", port, transport))
+
+    try:
+        os.makedirs(os.path.dirname(BLOCKED_PORTS_FILE), exist_ok=True)
+        tmp = BLOCKED_PORTS_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump([{"port": p, "transport": t} for p, t in sorted(wanted)], f)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, BLOCKED_PORTS_FILE)
+    except Exception:
+        pass
+
+    if wanted != previous:
+        print(f"[agent] 端口封禁名单已更新：封禁 {len(wanted)} 个端口 / 解除 {len(previous - wanted)} 个", flush=True)
 
 def ensure_firewall_open(port, transport=None):
     # 验证端口参数
@@ -767,7 +880,7 @@ def build_chain_outbound(target, tag):
     return outbound
 
 def build_singbox_config(nodes, proxy_cfg=None, peers=None, mesh=None, socks5_outbound=None, warp_mode="off"):
-    global proxy_port_conflict
+    global proxy_port_conflict, last_skipped_nodes
     singbox_config = {
         "log": {"level": "warn"},
         "inbounds": [],
@@ -777,6 +890,8 @@ def build_singbox_config(nodes, proxy_cfg=None, peers=None, mesh=None, socks5_ou
     active_certs = []
     valid_nodes = []
     listener_keys = set()
+    occupied = foreign_listeners()
+    skipped_nodes = []
     if warp_mode not in {"off", "ipv4", "ipv6", "dual"}:
         raise ValueError("invalid WARP mode")
 
@@ -803,6 +918,11 @@ def build_singbox_config(nodes, proxy_cfg=None, peers=None, mesh=None, socks5_ou
                 raise ValueError("dokodemo target_ip and target_port are required")
         except (KeyError, TypeError, ValueError) as error:
             print(f"[agent] skipping invalid node {node.get('id', '<unknown>')}: {error}", flush=True)
+            continue
+        if (transport, port) in occupied:
+            reason = f"port {port}/{transport} is held by another process (not sing-box) — free the port or change the node port"
+            print(f"[agent] skipping node {node_id}: {reason}", flush=True)
+            skipped_nodes.append({"id": node_id, "port": port, "reason": reason})
             continue
         sni = node.get("sni") or "addons.mozilla.org"
         clean_uuid = node.get('uuid', '').replace('-', '')
@@ -1011,6 +1131,7 @@ def build_singbox_config(nodes, proxy_cfg=None, peers=None, mesh=None, socks5_ou
 
     for node in valid_nodes:
         ensure_firewall_open(node["port"], "udp" if node.get("protocol") in {"Hysteria2", "TUIC"} else "tcp")
+    last_skipped_nodes = skipped_nodes
     os.makedirs(os.path.dirname(SINGBOX_CONF_PATH), exist_ok=True)
     new_config_str = json.dumps(singbox_config, indent=2)
     old_config_str = ""
@@ -1097,6 +1218,7 @@ def report_status(current_nodes, argo_urls, force_http=False, allow_http=True):
         pending_node_traffic = deltas
     status["node_traffic"] = pending_node_traffic
     status["report_id"] = pending_report_id
+    if last_skipped_nodes: status["skipped_nodes"] = list(last_skipped_nodes)
     _write_json_state(TRAFFIC_STATE_PATH, {"last_reported_bytes": last_reported_bytes, "pending": {"report_id": pending_report_id, "report_bytes": pending_report_bytes, "node_traffic": pending_node_traffic, "payload": pending_report_payload}})
 
     websocket_sent = realtime_channel.send(status) if realtime_channel and realtime_channel.connected else False
@@ -1228,7 +1350,7 @@ def report_proxy_status():
 def fetch_and_apply_configs():
     global REALTIME_URL, realtime_channel
     try:
-        with urllib.request.urlopen(urllib.request.Request(f"{API_URL}?ip={VPS_IP}", headers=HEADERS), timeout=10) as response:
+        with urllib.request.urlopen(urllib.request.Request(f"{API_URL}?ip={VPS_IP}", headers=HEADERS), timeout=30) as response:
             data = json.loads(response.read().decode('utf-8'))
         if data.get("success"):
             persist_agent_token(data.get("agent_token"))
@@ -1246,6 +1368,12 @@ def fetch_and_apply_configs():
                 realtime_channel = create_realtime_channel()
                 realtime_channel.start()
             nodes = data.get("configs", [])
+            # 热踢：无论本次配置是否有变化，都要按最新名单重放端口封禁。
+            # 放在 sing-box 重启逻辑之外——封端口不需要重启服务，且重启期间依然生效。
+            try:
+                apply_port_blocklist(data.get("blocked_ports") or [])
+            except Exception as blockErr:
+                print(f"[agent] 端口封禁名单应用失败：{blockErr}", flush=True)
             global current_proxy_config
             current_proxy_config = data.get("proxy") if isinstance(data.get("proxy"), dict) else {}
             mesh = _extract_mesh(current_proxy_config)
@@ -1356,7 +1484,7 @@ if __name__ == "__main__":
         global realtime_status_interval
         if message.get("type") == "status.interval":
             requested_interval = int(message.get("seconds", REALTIME_STATUS_IDLE_INTERVAL))
-            realtime_status_interval = max(REALTIME_STATUS_ACTIVE_INTERVAL, min(REALTIME_STATUS_IDLE_INTERVAL, requested_interval))
+            realtime_status_interval = max(REALTIME_STATUS_ACTIVE_INTERVAL, min(REALTIME_STATUS_MAX_INTERVAL, requested_interval))
             heartbeat_wakeup.set()
         if message.get("type") in {"config.refresh", "transport.connected", "transport.disconnected"}: config_wakeup.set()
         if message.get("type") in {"transport.connected", "transport.disconnected"}: heartbeat_wakeup.set()

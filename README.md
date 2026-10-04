@@ -88,7 +88,7 @@ KUI 是一个部署在 **单一 Cloudflare Worker** 的代理节点管理与服�
 
 #### 用环境变量接管（可选）
 
-若不想走面板初始化（例如希望用 CI 注入凭据），可在 `wrangler.jsonc` 填 `ADMIN_USERNAME`，并执行 `npx wrangler secret put ADMIN_PASSWORD`。两者齐备时面板视为**已初始化**，不再显示初始化页，也不会被他人抢占。
+若不想走面板初始化（例如希望用 CI 注入凭据），可在 `wrangler.prod.jsonc` 填 `ADMIN_USERNAME`，并执行 `npx wrangler secret put ADMIN_PASSWORD`。两者齐备时面板视为**已初始化**，不再显示初始化页，也不会被他人抢占。
 
 内置住宅代理也已预设凭据：
 
@@ -115,7 +115,21 @@ npx wrangler login
 npx wrangler deploy
 ```
 
-当前 `wrangler.jsonc` 未指定 D1 ID，首次部署会自动创建数据库和实时 Durable Objects。若需要使用已有 D1，在 Cloudflare Dashboard 的 Worker **Settings → Bindings** 中将 `DB` 重绑到目标数据库后重新部署。
+当前 `wrangler.prod.jsonc` 已固定 D1 为 `kui-test-db`（20261004 正式版生产库，`database_id: ee9b5fe5-9023-4720-b2f5-bd2c3db12937`）。
+
+- 换库：修改 `d1_databases[0].database_id` 后重新部署。
+- 首次部署到全新账号时，删除该 `d1_databases` 条目，wrangler 会自动建库并建实时 Durable Objects。
+
+部署命令（配置已收敛为单一文件）：
+
+```bash
+npx wrangler deploy --config wrangler.prod.jsonc
+```
+
+> 2026-10-04 起测试环境（`wrangler.test.jsonc` / Worker `kui-test`）已取消，
+> test库 `kui-test-db` 升格为生产库。原生产库 `kui-v2-db` 已删除，
+> 全量备份见 `_backup_20261004/`（不入库）。切换细节见
+> `20261004正式版切换方案.md`。
 
 生产环境请立即替换默认密码：
 

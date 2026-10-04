@@ -425,6 +425,12 @@ last_http_report = 0
 # WebSocket remains the primary five-second live channel.
 REALTIME_HTTP_INTERVAL = 30
 
+# 配置拉取兜底间隔（秒）。
+# 停用/启用用户、调整授权属于「热踢」操作，等 30~300s 才生效太长。
+# WebSocket 通了走推送（亚秒级），这里的值只在推送链路不可用时兜底。
+# 15s 是权衡：够快保证被踢的人最多多活 15s，又不会把 CF /api/config 打到超限。
+CONFIG_POLL_INTERVAL_FALLBACK = 15
+
 # 🌟 增加全局 Ping 状态缓存锁，防止在非测速轮次上传 '0' 导致前端图表归零
 last_pings = {"ct": "0", "cu": "0", "cm": "0", "bd": "0"}
 dynamic_ping = {"ct": None, "cu": None, "cm": None}
@@ -1664,5 +1670,11 @@ if __name__ == "__main__":
         elapsed = time.monotonic() - loop_started
         if elapsed > 20:
             print(f"[agent] slow loop completed in {elapsed:.1f}s", flush=True)
-        config_interval = REALTIME_HTTP_INTERVAL if realtime_channel and realtime_channel.connected else (30 if fast_mode else 300)
+        # 配置拉取节奏：
+        #   WebSocket 已连接 → 推送可达亚秒级，仍保留 REALTIME_HTTP_INTERVAL 作为断线兜底
+        #   WebSocket 不可用 → CONFIG_POLL_INTERVAL_FALLBACK 秒一次（原来 30/300，热踢延迟过长）
+        if realtime_channel and realtime_channel.connected:
+            config_interval = REALTIME_HTTP_INTERVAL
+        else:
+            config_interval = CONFIG_POLL_INTERVAL_FALLBACK
         config_wakeup.wait(timeout=max(1, config_interval - min(config_interval - 1, elapsed)))

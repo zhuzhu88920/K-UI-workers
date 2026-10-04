@@ -1,0 +1,68 @@
+{
+  // ============================================================
+  //  正式版配置 —— 20261004 正式版（由 test 环境升格）
+  //  版本标记：git tag 20261004-formal / commit 407b7ef
+  //  Worker Version: e96705ba-db54-46f5-acd2-a4b47dcdf281（kui-test 上验证通过）
+  //
+  //  数据来源：kui-test-db（ee9b5fe5-9023-4720-b2f5-bd2c3db12937）
+  //  该库内容 = test 环境验证期间使用的真实数据：
+  //    users 1（zhangsan）/ nodes 8 / node_grants 5 / servers 1（38.207.173.192 hk-vmiss）
+  //
+  //  2026-10-04 变更说明：
+  //  旧正式版 Worker kui-v2 + D1 kui-v2-db 已删除（数据备份在
+  //  _backup_20261004/kui-v2-db_old_prod.sql，可恢复）。
+  //  旧库独有数据：users andox/zhu、24 条授权、节点挂在 107.173.141.202、
+  //  sys_config.site_title —— 按决策全部丢弃，不迁移。
+  //
+  //  与 wrangler.test.jsonc 的关系：该配置已随测试环境一并废弃。
+  //  两配置共用同一份 src/ 与 static/ 源码。
+  // ============================================================
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "kui-v2",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-07-15",
+  "workers_dev": true,
+  "vars": {
+    // 凭据不预置。面板登录走 D1 的 admin_credentials 表（PBKDF2 哈希），
+    // 不依赖 secret。首屏若 D1 无记录会进入「初始化管理员」页面。
+    //
+    // PAGES_ORIGIN 是 realtime WebSocket 的 Origin 白名单。
+    // 绑了自定义域名后必须填，否则 /dashboard/ws 握手 403、实时推送永久重连。
+    "PAGES_ORIGIN": "https://kui.zhuyongfu.cn",
+    "PROXY_USER": "kui",
+    "PROXY_PASS": "kui"
+  },
+  "assets": {
+    "directory": "static",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api", "/api/*", "/health", "/agent/ws", "/dashboard/*", "/public/*", "/notify", "/public-policy", "/frequency-policy"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "kui-test-db",
+      "database_id": "ee9b5fe5-9023-4720-b2f5-bd2c3db12937",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "triggers": {
+    // 正式环境需要 cron：每5 分钟采集 VPS 状态
+    "crons": ["*/5 * * * *"]
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "VPS_PRESENCE", "class_name": "VpsPresence" },
+      { "name": "DASHBOARD_HUB", "class_name": "DashboardHub" }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["VpsPresence", "DashboardHub"]
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1
+  }
+}

@@ -1254,10 +1254,20 @@ def build_singbox_config(nodes, proxy_cfg=None, peers=None, mesh=None, socks5_ou
     else:
         subprocess.run(["systemctl", "start", "sing-box"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
         if not _singbox_service_healthy(): raise RuntimeError("sing-box is not healthy after start")
-    if socks5_outbound and socks5_outbound.get("source") == "residential": _verify_residential_exit(socks5_outbound)
-    elif socks5_outbound and socks5_outbound.get("source") == "manual": _verify_socks5_exit()
-    elif warp_mode != "off": _verify_warp_exit(warp_mode)
-    else: _verify_native_exit()
+    # 出口可达性检查只用于上报 egress 状态，绝不能阻断配置应用。
+    # 这些检查依赖外部 ipify 与住宅代理，任何一次抖动或限流都会抛错；
+    # 而它跑在 sing-box 配置已落盘并重启之后——一旦抛出，异常冒泡到
+    # fetch_and_apply_configs，下一轮又会因「配置串没变」跳过重启，
+    # 于是刚下发的凭据变更永远不生效，表现为「后台已停用/启用用户，
+    # 但 VPS 上 sing-box 的 users 数组还是旧的」，也就是热踢时灵时不灵。
+    # 降级为告警：出口坏了本来就通不了，不该顺带把凭据管控一起卡死。
+    try:
+        if socks5_outbound and socks5_outbound.get("source") == "residential": _verify_residential_exit(socks5_outbound)
+        elif socks5_outbound and socks5_outbound.get("source") == "manual": _verify_socks5_exit()
+        elif warp_mode != "off": _verify_warp_exit(warp_mode)
+        else: _verify_native_exit()
+    except Exception as exit_error:
+        print(f"[agent] egress verification skipped (non-fatal): {exit_error}", flush=True)
     for filename in os.listdir("/opt/kui/"):
         if (filename.startswith("cert_") or filename.startswith("key_")) and filename.endswith(".pem") and filename not in active_certs:
             try: os.remove(os.path.join("/opt/kui/", filename))

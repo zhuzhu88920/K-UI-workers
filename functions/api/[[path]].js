@@ -1394,28 +1394,41 @@ export async function onRequest(context) {
             }
         }
         let proxyCfg = { global: {}, toggle: { enable: false } };
-        try {
-            const r = await db.prepare("SELECT value FROM probe_settings WHERE key='proxy_config'").first();
-            if (r && r.value) { try { proxyCfg.global = JSON.parse(r.value); } catch (ex) {} }
-            const t = await db.prepare("SELECT value FROM probe_settings WHERE key='proxy_toggle_' || ?").bind(ip).first();
-            if (t && t.value) { try { proxyCfg.toggle = JSON.parse(t.value); } catch (ex) {} }
-        } catch (ex) {}
         let socks5_outbound = { enabled: false };
         let egress = { desired_mode: 'native', applied_mode: 'native', revision: 0, applied_revision: 0, status: 'applied', error: '', applied_at: 0 };
         let residential_outbound = { available: false };
+        let serverAuth = null;
+        let realtimeCfg = null;
+        // 下面这些读取互不依赖，合并成一次 batch：串行 await 每条都要独立往返 D1，
+        // 冷启动叠加后单次 /api/config 实测稳定2.3s，且约 5% 概率直接挂满 30s 超时，
+        // 表现为「热踢时灵时不灵」。batch 一次往返拿齐，内存里再拼装。
+        // servers 表这次顺带取 agent_token，省掉原来最后那条独立查询。
         try {
-            const s = await db.prepare("SELECT egress_mode, egress_applied_mode, egress_revision, egress_applied_revision, egress_status, egress_error, egress_applied_at, proxy_mode, proxy_categories, egress_ip, socks5_addr, socks5_port, socks5_user, socks5_pass FROM servers WHERE ip = ?").bind(ip).first();
+            const [proxyConfigRow, proxyToggleRow, serverRow, slotRow, globalSlotRow, realtimeRow] = await db.batch([
+                db.prepare("SELECT value FROM probe_settings WHERE key='proxy_config'"),
+                db.prepare("SELECT value FROM probe_settings WHERE key='proxy_toggle_' || ?").bind(ip),
+                db.prepare("SELECT agent_token, egress_mode, egress_applied_mode, egress_revision, egress_applied_revision, egress_status, egress_error, egress_applied_at, proxy_mode, proxy_categories, egress_ip, socks5_addr, socks5_port, socks5_user, socks5_pass FROM servers WHERE ip = ?").bind(ip),
+                db.prepare("SELECT value FROM probe_settings WHERE key = ?").bind(`proxy_slot_map_${ip}`),
+                db.prepare("SELECT value FROM probe_settings WHERE key = 'proxy_slot_map'"),
+                db.prepare("SELECT val FROM sys_config WHERE key = 'realtime_url'")
+            ]);
+            const p0 = proxyConfigRow.results && proxyConfigRow.results[0];
+            const p1 = proxyToggleRow.results && proxyToggleRow.results[0];
+            const s = serverRow.results && serverRow.results[0];
+            const slot = slotRow.results && slotRow.results[0];
+            const globalSlot = (slot && slot.value) ? slot : (globalSlotRow.results && globalSlotRow.results[0]);
+            const rt = realtimeRow.results && realtimeRow.results[0];
+            if (p0 && p0.value) { try { proxyCfg.global = JSON.parse(p0.value); } catch (ex) {} }
+            if (p1 && p1.value) { try { proxyCfg.toggle = JSON.parse(p1.value); } catch (ex) {} }
             if (s) egress = { desired_mode: s.egress_mode || 'native', applied_mode: s.egress_applied_mode || 'native', revision: Number(s.egress_revision || 0), applied_revision: Number(s.egress_applied_revision || 0), status: s.egress_status || 'applied', error: s.egress_error || '', applied_at: Number(s.egress_applied_at || 0), proxy_mode: s.proxy_mode || 'global', proxy_categories: s.proxy_categories || '', egress_ip: s.egress_ip || '', socks5_addr: s.socks5_addr || '', socks5_port: Number(s.socks5_port || 0), socks5_user: s.socks5_user || '', socks5_pass: s.socks5_pass || '' };
-            const slot = await db.prepare("SELECT value FROM probe_settings WHERE key = ?").bind(`proxy_slot_map_${ip}`).first();
-            const globalSlot = slot || await db.prepare("SELECT value FROM probe_settings WHERE key = 'proxy_slot_map'").first();
             let port = 7920; try { port = parseInt(JSON.parse(slot?.value || '{}').port) || 7920; } catch (_) {}
             try { port = parseInt(JSON.parse(globalSlot?.value || '{}').port) || 7920; } catch (_) {}
             const localResidential = !env.PROXY_CTRL_URL;
             residential_outbound = { available: localResidential && !!(env.PROXY_USER && env.PROXY_PASS), reason: localResidential ? '' : '外部住宅控制器模式未在本机安装 proxy-lite', addr: '127.0.0.1', port, user: agentAuthenticated && localResidential ? env.PROXY_USER || '' : '', pass: agentAuthenticated && localResidential ? env.PROXY_PASS || '' : '' };
+            serverAuth = s;
+            realtimeCfg = rt;
         } catch (ex) {}
-        const serverAuth = await db.prepare("SELECT agent_token FROM servers WHERE ip = ?").bind(ip).first();
-        const realtime = await db.prepare("SELECT val FROM sys_config WHERE key = 'realtime_url'").first();
-        return Response.json({ success: true, configs: machineNodes, node_grants: grantList, blocked_ports: blockedPorts, agent_token: serverAuth && serverAuth.agent_token || '', proxy: proxyCfg, residential_outbound, egress, realtime_url: env.REALTIME_URL || realtime && realtime.val || '' });
+        return Response.json({ success: true, configs: machineNodes, node_grants: grantList, blocked_ports: blockedPorts, agent_token: serverAuth && serverAuth.agent_token || '', proxy: proxyCfg, residential_outbound, egress, realtime_url: env.REALTIME_URL || realtimeCfg && realtimeCfg.val || '' });
     }
 
         if (action === "egress_result" && method === "POST") {

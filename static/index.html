@@ -149,7 +149,10 @@
         .kui-fire:hover{ opacity:.9; }
         .kui-w-user{flex:0 0 178px} .kui-w-owner{flex:0 0 134px} .kui-w-proto{flex:0 0 150px}
         .kui-w-port{flex:0 0 70px} .kui-w-num{flex:0 0 74px} .kui-w-date{flex:0 0 140px}
-        .kui-w-sni{flex:1 1 150px;min-width:130px}
+        /* 伪装域名原本是唯一 flex:1 项，会吃掉整行剩余宽度（实测能到 400px+），
+           域名本身最长也就三十来个字符，摆那么宽纯属浪费横向空间。
+           改为固定 210px，多出来的空间由「下发该节点」按钮所在的行自然消化。 */
+        .kui-w-sni{flex:0 1 210px;min-width:150px}
         /* flex item 的 min-width 默认是 auto，会被 <input> 的固有 size（约20字符）撑住，
            使 flex-basis 失效——实测 basis 70px 却渲染成 172px。必须显式清零。 */
         .kui-ctl{ min-width:0; }
@@ -222,10 +225,16 @@
         .kui-step{ display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px;
                    border-radius:50%; background:var(--accent); color:#fff; font-size:9.5px; font-weight:900; }
 
-        /* ---------- 节点网格列数（Vue 动态生成的类，Tailwind CDN 的 JIT 扫描可能滞后） ---------- */
-        .kui-nodes{ display:grid; gap:12px; grid-template-columns:repeat(2,minmax(0,1fr)); }
+        /* ---------- 节点网格列数（Vue 动态生成的类，Tailwind CDN 的 JIT 扫描可能滞后） ----------
+           节点数一多，卡片纵向就拉得很长。这里把行距从 12px 收到 8px、列宽下限压到 210px，
+           同屏能多放一列，整体高度明显收窄。 */
+        .kui-nodes{ display:grid; gap:8px; grid-template-columns:repeat(2,minmax(0,1fr)); }
         @media (min-width:768px){ .kui-nodes{ grid-template-columns:repeat(4,minmax(0,1fr)); } }
         @media (min-width:1400px){ .kui-nodes{ grid-template-columns:repeat(6,minmax(0,1fr)); } }
+        /* 单卡内部留白同步压缩：p-3→p-2、mb-3→mb-2 是主要的高度来源 */
+        .kui-nodes > div{ padding:8px !important; }
+        .kui-nodes > div > .flex.justify-between.items-start{ margin-bottom:6px !important; }
+        .kui-nodes > div .mt-2{ margin-top:6px !important; }
 
         /* ---------- mini 7 天柱图（柱高与统计字号对齐） ---------- */
         .kui-spark{ display:inline-flex; align-items:flex-end; gap:2px; height:var(--chip-fs); line-height:1; }
@@ -710,6 +719,10 @@
                         </div>
 
                         <div class="px-6 md:px-8 pb-4">
+                            <!-- 下发节点 与 节点出口 并排一行：左边整块下发表单，右边出口选择。
+                                 原来节点出口单独占一整行且占满宽度，看起来比它实际内容宽得多。 -->
+                            <div class="grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-4 items-start">
+                            <div>
                             <!-- ② 下发节点（L3 上下横条，控件统一 38px 等高） -->
                             <div class="text-[10px] font-black tracking-wider mb-2 flex items-center gap-2"><span class="kui-step">②</span> 下发节点</div>
                             <div class="kui-row">
@@ -735,9 +748,9 @@
                                 <select v-else v-model="newNodeParams[vps.ip].target_id" class="kui-ctl kui-w-sni"><option value="">选择目标节点</option><option v-for="target in nodes.filter(n => n.id && n.protocol !== 'dokodemo-door')" :value="target.id">{{ getVpsName(target.vps_ip) }} · {{ target.protocol }}:{{ target.port }}</option></select>
                             </div>
 
-                            <div class="bg-sky-50/70 p-4 rounded-[1.5rem] border border-sky-100 mt-4">
-                                <div class="mb-3"><div class="text-xs font-black text-sky-700 tracking-wider">节点出口</div><div class="text-[10px] text-sky-500/80 mt-0.5">手动下拉选择；系统保证 SOCKS5 与 WARP 不会同时启用</div></div>
-                                <select :value="egressModeOf(vps)" @change="onEgressModeChange(vps, $event.target.value)" :disabled="vps.egress_status === 'pending'" class="w-full bg-white border border-sky-200 p-3 rounded-xl text-sm font-black text-slate-700 outline-none disabled:opacity-50">
+                            <div class="bg-sky-50/70 p-3 rounded-xl border border-sky-100">
+                                <div class="mb-2"><div class="text-xs font-black text-sky-700 tracking-wider">节点出口</div><div class="text-[10px] text-sky-500/80 mt-0.5">SOCKS5 与 WARP 不会同时启用</div></div>
+                                <select :value="egressModeOf(vps)" @change="onEgressModeChange(vps, $event.target.value)" :disabled="vps.egress_status === 'pending'" class="w-full bg-white border border-sky-200 p-2 rounded-lg text-xs font-black text-slate-700 outline-none disabled:opacity-50">
                                     <option value="native">原生出口</option>
                                     <option value="warp_ipv4">WARP IPv4</option>
                                     <option value="warp_ipv6">WARP IPv6</option>
@@ -758,12 +771,12 @@
                                 </div>
                                 <div v-if="egressModeOf(vps) === 'socks5'" class="mt-3 space-y-2">
                                     <div class="grid grid-cols-3 gap-2">
-                                        <input v-model="vps._socks5_addr" placeholder="地址" class="col-span-2 bg-white border border-sky-200 p-2 rounded-xl text-sm font-medium text-slate-700 outline-none">
-                                        <input v-model.number="vps._socks5_port" placeholder="端口" type="number" class="bg-white border border-sky-200 p-2 rounded-xl text-sm font-medium text-slate-700 outline-none">
+                                        <input v-model="vps._socks5_addr" placeholder="地址" class="col-span-2 bg-white border border-sky-200 p-2 rounded-lg text-xs font-medium text-slate-700 outline-none">
+                                        <input v-model.number="vps._socks5_port" placeholder="端口" type="number" class="bg-white border border-sky-200 p-2 rounded-lg text-xs font-medium text-slate-700 outline-none">
                                     </div>
                                     <div class="grid grid-cols-2 gap-2">
-                                        <input v-model="vps._socks5_user" placeholder="用户名（可选）" class="bg-white border border-sky-200 p-2 rounded-xl text-sm font-medium text-slate-700 outline-none">
-                                        <input v-model="vps._socks5_pass" placeholder="密码（可选）" type="password" class="bg-white border border-sky-200 p-2 rounded-xl text-sm font-medium text-slate-700 outline-none">
+                                        <input v-model="vps._socks5_user" placeholder="用户名（可选）" class="bg-white border border-sky-200 p-2 rounded-lg text-xs font-medium text-slate-700 outline-none">
+                                        <input v-model="vps._socks5_pass" placeholder="密码（可选）" type="password" class="bg-white border border-sky-200 p-2 rounded-lg text-xs font-medium text-slate-700 outline-none">
                                     </div>
                                     <div class="flex gap-2 mb-1">
                                         <button @click="setProxyMode(vps, 'socks5', 'global')" :class="proxyModeOf(vps) === 'global' ? 'bg-sky-600 text-white shadow-md' : 'bg-white text-slate-600 border border-sky-200'" class="flex-1 py-2 rounded-xl text-xs font-black transition-all">全局代理</button>
@@ -783,6 +796,8 @@
                                     <span v-else-if="vps.egress_status === 'failed'">● 应用失败；实际保持 {{ egressModeLabel(vps.egress_applied_mode) }}：{{ vps.egress_error || '未知错误' }}</span>
                                 </div>
                             </div>
+                            </div>
+                            </div>
 
                         </div>
 
@@ -791,7 +806,7 @@
                             <div v-for="node in getNodesByIp(vps.ip)" :key="node.id" class="bg-white/80 border border-white p-3 rounded-xl shadow-sm hover:shadow-md group transition-all flex flex-col">
                                 <div class="flex justify-between items-start mb-3">
                                     <div class="flex-1 overflow-hidden pr-2">
-                                        <div class="flex items-center gap-2 mb-1.5"><span class="font-black text-slate-700">{{ node.protocol }} <span class="font-mono text-slate-400 text-xs bg-slate-100 px-1.5 rounded">#{{ node.port }}</span></span><span class="text-[10px] bg-purple-50 text-purple-600 px-2 py-0.5 rounded-md font-bold">👥 {{ (node._grant_users || []).length }} 人</span><span v-if="node.enable === 0" class="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md font-bold">已停用</span></div>
+                                        <div class="flex items-center gap-2 mb-1.5"><span class="font-black text-slate-700">{{ node.protocol }} <span class="font-mono text-slate-400 text-xs bg-slate-100 px-1.5 rounded">#{{ node.port }}</span></span><span class="text-[10px] bg-purple-50 text-purple-600 px-2 py-0.5 rounded-md font-bold">👥 {{ (node._grant_users || []).length }} 人</span><span v-if="['XTLS-Reality','Reality','Hysteria2','TUIC','Trojan','H2-Reality','gRPC-Reality','AnyTLS','VLESS','Reality'].includes(node.protocol)" class="text-[10px] bg-slate-800 text-white px-2 py-0.5 rounded-md font-bold" title="管理员使用独立凭据，自动放行全部节点，不参与用户授权勾选">管理员自动放行</span><span v-if="node.enable === 0" class="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md font-bold">已停用</span></div>
                                         <div v-if="node.protocol === 'VLESS-Argo'" class="text-[11px] p-1.5 rounded-lg overflow-hidden text-ellipsis whitespace-nowrap max-w-full inline-block" :class="node.sni.includes('等待') ? 'bg-amber-50 text-amber-600 animate-pulse font-bold' : 'bg-emerald-50 border border-emerald-100 text-emerald-700 font-mono font-bold'">Argo: {{ node.sni }}</div>
                                         <div v-else-if="node.sni" class="text-[11px] bg-slate-50 text-slate-500 p-1.5 rounded-lg overflow-hidden text-ellipsis font-mono inline-block">SNI: {{ node.sni }}</div>
                                     </div>

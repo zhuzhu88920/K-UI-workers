@@ -5,3 +5,11 @@ node_modules/
 __pycache__/
 *.pyc
 _verify/
+
+# 本地测试工具（含 82MB sing-box 二进制，不入库）
+_verify/tools/
+_verify/*.txt
+_verify/*.log
+_verify/probe_cfg.json
+_verify/probe_state.json
+.playwright-cli/

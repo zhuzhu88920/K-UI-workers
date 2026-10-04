@@ -1393,6 +1393,39 @@ export async function onRequest(context) {
                 grantList = grantList.filter(g => active.has(g.username));
             }
         }
+        // 管理员独立凭据：管理员在订阅侧走的是「全站看全部启用节点」的特权分支，
+        // 完全不经过 node_grants，于是这里下发什么，VPS 上就只有什么 —— 两者不一致时
+        // 管理员的链接必然握手被拒（订阅给 nodes.uuid 主凭据，VPS 只有用户的凭据）。
+        //
+        // 处理方式：管理员凭据单独存 sys_config.admin_node_credentials，不混进 node_grants。
+        // 理由是 node_grants 牵着「停用过滤 / 删除用户回收凭据 / 授权增删」一整套刚验证过的
+        // 逻辑，管理员插进去等于给那套逻辑加分支，风险远大于收益；而 sys_config 是纯 KV，
+        // 删节点时顺带清掉对应键即可，对既有授权逻辑零影响。
+        //
+        // 懒生成：只在缺失时生成并落库，因此不需要一次性迁移，老库第一次拉配置就自动补齐。
+        // 存主凭据（nodes.uuid）也不行——那正是当前这个 bug 的根因，必须独立。
+        try {
+            const adminNameNow = await adminName(db, env);
+            if (adminNameNow) {
+                const multi = machineNodes.filter(n => supportsMultiCredential(n.protocol));
+                if (multi.length) {
+                    const row = await db.prepare("SELECT val FROM sys_config WHERE key = 'admin_node_credentials'").first();
+                    let map = {};
+                    try { map = JSON.parse((row && row.val) || '{}') || {}; } catch (e) { map = {}; }
+                    let dirty = false;
+                    for (const n of multi) {
+                        if (!map[n.id]) {
+                            map[n.id] = generateCredential(n.protocol);
+                            dirty = true;
+                        }
+                        grantList.push({ node_id: n.id, username: adminNameNow, credential: map[n.id] });
+                    }
+                    if (dirty) {
+                        await db.prepare("INSERT OR REPLACE INTO sys_config (key, val, ts) VALUES ('admin_node_credentials', ?, ?)").bind(JSON.stringify(map), Date.now()).run();
+                    }
+                }
+            }
+        } catch (e) {}
         let proxyCfg = { global: {}, toggle: { enable: false } };
         let socks5_outbound = { enabled: false };
         let egress = { desired_mode: 'native', applied_mode: 'native', revision: 0, applied_revision: 0, status: 'applied', error: '', applied_at: 0 };
@@ -1566,6 +1599,16 @@ export async function onRequest(context) {
                     } catch (e) {}
                 }
             }
+        }
+        // 管理员读自己的独立凭据（与 /api/config 下发的那份同源，见该处注释）。
+        // 这里绝不能回落到 nodes.uuid：VPS 上的 users 数组用的是独立凭据，
+        // 回落主凭据会渲染出「看起来正常但必然握手被拒」的链接 —— 正是当前这个 bug。
+        if (results.length && reqUser === adminUser) {
+            try {
+                const row = await db.prepare("SELECT val FROM sys_config WHERE key = 'admin_node_credentials'").first();
+                const map = JSON.parse((row && row.val) || '{}') || {};
+                for (const r of results) if (map[r.id]) grantMap.set(r.id, map[r.id]);
+            } catch (e) {}
         }
         
         let subLinks = [];
@@ -1945,10 +1988,16 @@ rules:
             // 给每个节点挂上被授权的用户名列表，供前端授权页勾选状态回显。
             // 只下发username，不下发 credential —— 凭据只用于服务端下发 sing-box，
             // 泄露到浏览器等于把所有人的凭据公开。
+            //
+            // 管理员不写进 node_grants（凭据独立存在 sys_config.admin_node_credentials），
+            // 所以这里天然不会出现管理员名字；但为了面板上能显式呈现"管理员自动放行"，
+            // 额外下发一个 _admin_auto 标记，前端据此显示说明而不把它列进可勾选用户。
+            const adminNow = await adminName(db, env);
             try {
                 const grantMap = new Map();
                 const g = await db.prepare("SELECT node_id, username FROM node_grants").all();
                 for (const r of (g.results || [])) {
+                    if (adminNow && r.username === adminNow) continue;
                     if (!grantMap.has(r.node_id)) grantMap.set(r.node_id, []);
                     grantMap.get(r.node_id).push(r.username);
                 }
@@ -2136,6 +2185,8 @@ rules:
             if (method === "DELETE") { 
                 const ip = new URL(request.url).searchParams.get("ip"); 
                 await db.batch([ db.prepare("INSERT OR REPLACE INTO retired_agent_tokens (token, ip, retired_at) SELECT agent_token, ip, ? FROM servers WHERE ip = ? AND agent_token IS NOT NULL").bind(Date.now(), ip), db.prepare("DELETE FROM retired_agent_tokens WHERE retired_at < ?").bind(Date.now() - 30 * 86400000), db.prepare("DELETE FROM user_group_resources WHERE resource_type = 'vps' AND resource_id = ?").bind(ip), db.prepare("DELETE FROM user_group_resources WHERE resource_type = 'node' AND resource_id IN (SELECT id FROM nodes WHERE vps_ip = ?)").bind(ip), db.prepare("DELETE FROM node_grants WHERE node_id IN (SELECT id FROM nodes WHERE vps_ip = ?)").bind(ip), db.prepare("DELETE FROM nodes WHERE vps_ip = ?").bind(ip), db.prepare("DELETE FROM traffic_stats WHERE ip = ?").bind(ip), db.prepare("DELETE FROM servers WHERE ip = ?").bind(ip), db.prepare("DELETE FROM probe_servers WHERE id = ?").bind(ip), db.prepare("DELETE FROM proxy_ctrl_servers WHERE ip = ?").bind(ip), db.prepare("DELETE FROM server_logs WHERE ip = ?").bind(ip), db.prepare("DELETE FROM probe_settings WHERE key = ?").bind(`proxy_slot_map_${ip}`) ]);
+            // 同上：VPS 连带删掉它上面所有节点，管理员凭据表里对应的键一并清掉。
+            try { const ar = await db.prepare("SELECT val FROM sys_config WHERE key = 'admin_node_credentials'").first(); const amap = JSON.parse((ar && ar.val) || '{}') || {}; const gone = (await db.prepare("SELECT id FROM nodes WHERE vps_ip = ?").bind(ip).all()).results.map(r => r.id); let chg = false; for (const nid of gone) if (amap[nid]) { delete amap[nid]; chg = true; } if (chg) await db.prepare("INSERT OR REPLACE INTO sys_config (key, val, ts) VALUES ('admin_node_credentials', ?, ?)").bind(JSON.stringify(amap), Date.now()); } catch (e) {}
                 return Response.json({ success: true }); 
             }
         }
@@ -2146,7 +2197,12 @@ rules:
                 const grantTargets = [...new Set([nodeUser, currentUser])];
                 context.waitUntil(notifyRealtimeVps(env, db, n.vps_ip).catch(()=>{})); return Response.json({ success: true }); }
             if (method === "PUT") { const { id, enable, reset_traffic } = await request.json(); const node = await db.prepare('SELECT vps_ip FROM nodes WHERE id = ?').bind(id).first(); if (!node) return Response.json({ error: 'Node not found' }, { status: 404 }); const statements = []; if (reset_traffic) statements.push(db.prepare("UPDATE nodes SET traffic_used = 0 WHERE id = ?").bind(id)); if (enable !== undefined) statements.push(db.prepare("UPDATE nodes SET enable = ? WHERE id = ?").bind(enable ? 1 : 0, id)); if (statements.length) await db.batch(statements); context.waitUntil(notifyRealtimeVps(env, db, node.vps_ip).catch(()=>{})); return Response.json({ success: true }); }
-            if (method === "DELETE") { const id = new URL(request.url).searchParams.get("id"); const node = await db.prepare('SELECT vps_ip FROM nodes WHERE id = ?').bind(id).first(); await db.batch([db.prepare("DELETE FROM user_group_resources WHERE resource_type = 'node' AND resource_id = ?").bind(id), db.prepare("DELETE FROM node_grants WHERE node_id = ?").bind(id), db.prepare("DELETE FROM nodes WHERE id = ?").bind(id)]); if (node) context.waitUntil(notifyRealtimeVps(env, db, node.vps_ip).catch(()=>{})); return Response.json({ success: true }); }
+            if (method === "DELETE") { const id = new URL(request.url).searchParams.get("id"); const node = await db.prepare('SELECT vps_ip FROM nodes WHERE id = ?').bind(id).first(); const stmts = [db.prepare("DELETE FROM user_group_resources WHERE resource_type = 'node' AND resource_id = ?").bind(id), db.prepare("DELETE FROM node_grants WHERE node_id = ?").bind(id), db.prepare("DELETE FROM nodes WHERE id = ?").bind(id)];
+                // 同步清掉管理员在该节点上的独立凭据。不清也不会立刻出错（下次拉配置时
+                // 因节点已不在 machineNodes 里而不会用到），但同一 id 被重新创建时会
+                // 复用旧凭据，造成"节点是新的、凭据是旧的"这种难查的串号问题。
+                try { const ar = await db.prepare("SELECT val FROM sys_config WHERE key = 'admin_node_credentials'").first(); const amap = JSON.parse((ar && ar.val) || '{}') || {}; if (amap[id]) { delete amap[id]; stmts.push(db.prepare("INSERT OR REPLACE INTO sys_config (key, val, ts) VALUES ('admin_node_credentials', ?, ?)").bind(JSON.stringify(amap), Date.now())); } } catch (e) {}
+                await db.batch(stmts); if (node) context.waitUntil(notifyRealtimeVps(env, db, node.vps_ip).catch(()=>{})); return Response.json({ success: true }); }
         }
 
     if (action === "thirdparty" && isAdmin) {

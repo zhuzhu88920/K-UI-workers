@@ -69,9 +69,12 @@ curl -s "https://kui.zhuyongfu.cn/api/sub?user=zhuzhu&token=<TOKEN>" | base64 -d
 **实测结论**：AnyTLS **完整入库**，`ConfigType=11`，三条记录备注均带 `AnyTLS_9997`，凭据与 VPS `/etc/sing-box/config.json` 逐条对得上：
 
 ```
-VPS 实测: port=9997 anytls password = '***REDACTED-ANYTLS-PASSWORD***'
-订阅输出: anytls://***REDACTED-ANYTLS-PASSWORD***@38.207.173.192:9997
+VPS 实测: port=9997 anytls password = '<22字符 base64，已脱敏>'
+订阅输出: anytls://<同值>@38.207.173.192:9997
 ```
+
+> 脱敏说明：原文此处记录的是真实节点密码（可直连 VPS），已替换为占位符。
+> 核对方法不变 —— 凭据与 VPS `/etc/sing-box/config.json` 逐条对得上。
 
 走 sing-box 内核（`core=24`）。**AnyTLS 无任何问题。**
 

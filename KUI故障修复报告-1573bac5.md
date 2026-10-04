@@ -115,7 +115,7 @@ if realtime_channel and realtime_channel.enabled and not websocket_sent \
 | tuic | 2 |
 | socks5 | 2（住宅代理） |
 
-凭据与 VPS 侧 `config.json` 逐条吻合，例如 AnyTLS password `***REDACTED-ANYTLS-PASSWORD***` 一致。
+凭据与 VPS 侧 `config.json` 逐条吻合，例如 AnyTLS password（22 字符 base64，已脱敏）一致。
 
 ### 推测的真实原因
 **「订阅输出没有」与「客户端看不到」是两件事**：

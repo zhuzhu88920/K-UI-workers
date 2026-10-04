@@ -74,6 +74,9 @@
             --txt:#16212b; --sub:#6b7d90; --accent:#0e9488; --accent2:#1d4ed8;
             --ok:#0f9d58; --warn:#b45309; --danger:#dc2626; --blue:#2563eb;
             --radius:10px; --shadow:0 1px 2px rgba(16,33,45,.06);
+     --radius-sm:6px; --shadow-hover:0 8px 20px rgba(16,33,45,.10);
+     --sub2:#9aa9b8; --accent-hover:#0b7a70; --accent-light:#e2f5f2;
+      --danger-light:#fdeaea;
             --ctl:38px;        /* 下发区控件统一高度 */
             --ctl-fs:12.5px;
             --chip-fs:14px;    /* 统计标签字号（定稿 14px） */
@@ -225,16 +228,58 @@
         .kui-step{ display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px;
                    border-radius:50%; background:var(--accent); color:#fff; font-size:9.5px; font-weight:900; }
 
-        /* ---------- 节点网格列数（Vue 动态生成的类，Tailwind CDN 的 JIT 扫描可能滞后） ----------
-           节点数一多，卡片纵向就拉得很长。这里把行距从 12px 收到 8px、列宽下限压到 210px，
-           同屏能多放一列，整体高度明显收窄。 */
-        .kui-nodes{ display:grid; gap:8px; grid-template-columns:repeat(2,minmax(0,1fr)); }
-        @media (min-width:768px){ .kui-nodes{ grid-template-columns:repeat(4,minmax(0,1fr)); } }
-        @media (min-width:1400px){ .kui-nodes{ grid-template-columns:repeat(6,minmax(0,1fr)); } }
-        /* 单卡内部留白同步压缩：p-3→p-2、mb-3→mb-2 是主要的高度来源 */
-        .kui-nodes > div{ padding:8px !important; }
-        .kui-nodes > div > .flex.justify-between.items-start{ margin-bottom:6px !important; }
-        .kui-nodes > div .mt-2{ margin-top:6px !important; }
+        /* ---------- ③ 节点矩阵（参照 demo_v8） ----------
+           v8 的关键不是「把 padding 调小」，而是给 tile 一个**固定高度** 76px，
+           再把操作按钮做成 hover 浮层——按钮平时不占布局，天然不会撑高卡片。
+           注意：必须显式给 display:flex + flex-direction:column，
+           否则 justify-content:space-between 与 .n-bot{margin-top:auto} 全部失效。 */
+        .kui-nodes{ display:grid; gap:10px; grid-template-columns:repeat(1,minmax(0,1fr)); }
+        @media (min-width:640px){ .kui-nodes{ grid-template-columns:repeat(3,minmax(0,1fr)); } }
+        @media (min-width:900px){ .kui-nodes{ grid-template-columns:repeat(4,minmax(0,1fr)); } }
+        @media (min-width:1280px){ .kui-nodes{ grid-template-columns:repeat(6,minmax(0,1fr)); } }
+        /* 定高 76px + space-between：三行内容（协议行 / SNI 行 / 进度条+数字）严格等分 */
+        .kui-ncard{ box-sizing:border-box; height:76px; padding:8px 10px;
+            display:flex; flex-direction:column; justify-content:space-between; gap:0;
+            background:var(--surf); border:1px solid var(--line); border-radius:var(--radius);
+            position:relative; transition:all .15s ease; }
+        .kui-ncard:hover{ border-color:var(--accent); box-shadow:var(--shadow-hover); transform:translateY(-1px); }
+        .kui-ncard.is-disabled{ opacity:.65; background:#f1f5f9; border-style:dashed; }
+        /* 首行：协议 + 端口 + 授权人数 */
+        .kui-ncard .n-top{ display:flex; align-items:center; justify-content:space-between; gap:4px; min-width:0; }
+        .kui-ncard .n-meta-left{ display:flex; align-items:center; gap:5px; min-width:0; }
+        .kui-ncard .n-proto{ font-family:var(--mono); font-size:12px; font-weight:800; color:var(--txt);
+            white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .kui-ncard .n-port{ font-family:var(--mono); font-size:10.5px; font-weight:700; color:var(--sub);
+            background:var(--surf2); border:1px solid var(--line); padding:1px 4px; border-radius:4px;
+            white-space:nowrap; }
+        .kui-ncard .n-users{ font-size:10px; font-weight:700; color:var(--accent-hover);
+            background:var(--accent-light); padding:1px 5px; border-radius:4px;
+            white-space:nowrap; flex-shrink:0; }
+        /* hover 浮出操作组：absolute 不占布局，卡片高度恒定 */
+        .kui-ncard .n-ops{ position:absolute; right:6px; top:6px; display:flex; gap:3px;
+            background:var(--surf); padding:2px; border:1px solid var(--line); border-radius:var(--radius-sm);
+            box-shadow:var(--shadow); opacity:0; pointer-events:none; transition:.15s ease; z-index:5; }
+        .kui-ncard:hover .n-ops{ opacity:1; pointer-events:auto; }
+        .kui-ncard .n-op-btn{ border:none; background:transparent; padding:2px 5px; font-size:10px;
+            font-weight:700; color:var(--sub); border-radius:3px; cursor:pointer; white-space:nowrap; }
+        .kui-ncard .n-op-btn:hover{ background:var(--surf2); color:var(--txt); }
+        .kui-ncard .n-op-btn.del:hover{ background:var(--danger-light); color:var(--danger); }
+        /* 中行 SNI：单行省略，恒定不挤占 */
+        .kui-ncard .n-mid{ display:flex; align-items:center; margin:2px 0 3px; min-width:0; }
+        .kui-ncard .n-sni{ font-family:var(--mono); font-size:10px; color:var(--sub2);
+            white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+        .kui-ncard .n-sni.empty{ opacity:.35; font-style:italic; }
+        /* 底行：3px 进度条 + 数字 */
+        .kui-ncard .n-bot{ margin-top:auto; }
+        .kui-ncard .n-bar{ height:3px; background:#e2e8f0; border-radius:2px; overflow:hidden; margin-bottom:4px; }
+        .kui-ncard .n-bar-fill{ height:100%; background:var(--accent); border-radius:2px; transition:width .3s; }
+        .kui-ncard .n-bar-fill.over{ background:#f87171; }
+        .kui-ncard .n-subtext{ display:flex; justify-content:space-between; align-items:center;
+font-family:var(--mono); font-size:9.5px; font-weight:600; color:var(--sub); }
+        /* 节点区标题行 */
+     .kui-nodes-cap{ display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:10px; flex-wrap:wrap; }
+        .kui-nodes-cap .cap-title{ font-size:13px; font-weight:800; color:var(--txt); display:flex; align-items:center; gap:8px; }
+        .kui-nodes-cap .cap-info{ font-family:var(--mono); font-size:11.5px; color:var(--sub2); }
 
         /* ---------- mini 7 天柱图（柱高与统计字号对齐） ---------- */
         .kui-spark{ display:inline-flex; align-items:flex-end; gap:2px; height:var(--chip-fs); line-height:1; }
@@ -801,23 +846,44 @@
 
                         </div>
 
-                        <div class="p-6 md:p-8 bg-slate-50/50 border-t border-white flex-1">
-                            <div class="kui-nodes">
-                            <div v-for="node in getNodesByIp(vps.ip)" :key="node.id" class="bg-white/80 border border-white p-3 rounded-xl shadow-sm hover:shadow-md group transition-all flex flex-col">
-                                <div class="flex justify-between items-start mb-3">
-                                    <div class="flex-1 overflow-hidden pr-2">
-                                        <div class="flex items-center gap-2 mb-1.5"><span class="font-black text-slate-700">{{ node.protocol }} <span class="font-mono text-slate-400 text-xs bg-slate-100 px-1.5 rounded">#{{ node.port }}</span></span><span class="text-[10px] bg-purple-50 text-purple-600 px-2 py-0.5 rounded-md font-bold">👥 {{ (node._grant_users || []).length }} 人</span><span v-if="['XTLS-Reality','Reality','Hysteria2','TUIC','Trojan','H2-Reality','gRPC-Reality','AnyTLS','VLESS','Reality'].includes(node.protocol)" class="text-[10px] bg-slate-800 text-white px-2 py-0.5 rounded-md font-bold" title="管理员使用独立凭据，自动放行全部节点，不参与用户授权勾选">管理员自动放行</span><span v-if="node.enable === 0" class="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md font-bold">已停用</span></div>
-                                        <div v-if="node.protocol === 'VLESS-Argo'" class="text-[11px] p-1.5 rounded-lg overflow-hidden text-ellipsis whitespace-nowrap max-w-full inline-block" :class="node.sni.includes('等待') ? 'bg-amber-50 text-amber-600 animate-pulse font-bold' : 'bg-emerald-50 border border-emerald-100 text-emerald-700 font-mono font-bold'">Argo: {{ node.sni }}</div>
-                                        <div v-else-if="node.sni" class="text-[11px] bg-slate-50 text-slate-500 p-1.5 rounded-lg overflow-hidden text-ellipsis font-mono inline-block">SNI: {{ node.sni }}</div>
-                                    </div>
-                                    <div class="flex flex-col gap-1 shrink-0"><button @click="toggleNode(node.id, node.enable === 1 ? 0 : 1)" class="text-[11px] px-2 py-1 rounded-md bg-white border border-slate-200 hover:bg-slate-50 font-bold text-slate-600 shadow-sm">{{ node.enable === 1 ? '停用' : '启用' }}</button><button @click="deleteNode(node.id)" class="text-rose-500 text-[11px] px-2 py-1 bg-white border border-rose-100 rounded-md hover:bg-rose-50 font-bold shadow-sm">删除</button></div>
-                                </div>
-                                <div class="w-full bg-slate-100 rounded-full h-1.5 mt-2 overflow-hidden"><div :class="(node.traffic_limit > 0 && node.traffic_used >= node.traffic_limit) ? 'bg-rose-400' : 'bg-slate-800'" class="h-1.5 rounded-full transition-all duration-500" :style="{ width: getTrafficPercent(node.traffic_used, node.traffic_limit) + '%' }"></div></div>
-                                <div class="flex justify-between text-[10px] text-slate-400 mt-2 font-medium"><span>已用: {{ formatBytes(node.traffic_used) }} <span v-if="node.traffic_limit > 0">/ {{ formatBytes(node.traffic_limit) }}</span></span><div class="flex gap-3"><span v-if="node.expire_time > 0">到期: {{ formatDate(node.expire_time) }}</span><button v-if="node.traffic_used > 0" @click="resetTraffic(node.id)" class="text-indigo-500 hover:underline font-bold">清零</button></div></div>
-                            </div>
-                            </div>
-                            <div v-if="getNodesByIp(vps.ip).length === 0" class="text-center text-slate-400 text-xs py-6 border-2 border-dashed border-slate-200 rounded-2xl font-medium">节点矩阵为空，请在上方一键下发建立</div>
-                        </div>
+<div class="p-5 md:px-5 py-5 bg-slate-50 border-t border-slate-200 flex-1">
+          <div class="kui-nodes-cap">
+        <span class="cap-title"><span class="kui-step">③</span> 协议节点矩阵<span class="n-port" style="color:var(--accent);background:var(--accent-light)">{{ getNodesByIp(vps.ip).length }} 个</span></span>
+          <span class="cap-info">定高 76px · 6 列等高平铺 · 悬停出操作</span>
+     </div>
+     <div class="kui-nodes">
+     <div v-for="node in getNodesByIp(vps.ip)" :key="node.id" class="kui-ncard" :class="node.enable === 0 ? 'is-disabled' : ''">
+          <!-- hover 浮出操作组：absolute 定位，不占布局故不撑高卡片 -->
+    <div class="n-ops">
+   <button class="n-op-btn" @click="toggleNode(node.id, node.enable === 1 ? 0 : 1)">{{ node.enable === 1 ? '停用' : '启用' }}</button>
+            <button v-if="node.traffic_used > 0" class="n-op-btn" @click="resetTraffic(node.id)">清零</button>
+       <button class="n-op-btn del" @click="deleteNode(node.id)">删除</button>
+         </div>
+    <!-- 首行：协议 + 端口 + 授权人数 -->
+    <div class="n-top">
+ <div class="n-meta-left">
+   <span class="n-proto">{{ node.protocol }}</span>
+           <span class="n-port">#{{ node.port }}</span>
+ </div>
+   <span class="n-users" v-if="(node._grant_users || []).length > 0">👥 {{ (node._grant_users || []).length }}</span>
+</div>
+   <!-- 中行：SNI 单行省略；无 SNI 时显示协议默认说明 -->
+     <div class="n-mid">
+        <span v-if="node.protocol === 'VLESS-Argo'" class="n-sni" :class="node.sni && node.sni.includes('等待') ? 'text-amber-600 font-bold' : ''">{{ node.sni ? 'argo: ' + node.sni : 'argo: 等待分配' }}</span>
+   <span v-else-if="node.sni" class="n-sni">sni: {{ node.sni }}</span>
+   <span v-else class="n-sni empty">直接 TCP</span>
+      </div>
+      <!-- 底行：3px 进度条 + 用量 / 到期 -->
+    <div class="n-bot">
+      <div class="n-bar"><div class="n-bar-fill" :class="(node.traffic_limit > 0 && node.traffic_used >= node.traffic_limit) ? 'over' : ''" :style="{ width: getTrafficPercent(node.traffic_used, node.traffic_limit) + '%' }"></div></div>
+    <div class="n-subtext">
+      <span>{{ formatBytes(node.traffic_used) }}<template v-if="node.traffic_limit > 0">/{{ formatBytes(node.traffic_limit) }}</template></span>
+   <span>{{ node.enable === 0 ? '已停用' : (node.expire_time > 0 ? formatDate(node.expire_time) : '永久') }}</span>
+</div>
+    </div>
+           </div>
+      <div v-if="getNodesByIp(vps.ip).length === 0" class="text-center text-slate-400 text-xs py-6 border-2 border-dashed border-slate-200 rounded-lg font-medium">节点矩阵为空，请在上方一键下发建立</div>
+</div>
 
                         <!-- ① 部署命令与「此机」订阅已上移到下发区上方 -->
                     </div>

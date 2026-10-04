@@ -62,7 +62,9 @@ let failed = 0;
 
     const r = await p.evaluate((tb) => {
       const a = document.getElementById('app');
-      const res = { kids: a ? a.children.length : -1, h: a ? Math.round(a.getBoundingClientRect().height) : 0, len: a ? a.innerHTML.length : 0 };
+      const res = { kids: a ? a.children.length : -1, h: a ? Math.round(a.getBoundingClientRect().height) : 0, len: a ? a.innerHTML.length : 0,
+        // 主区可见文本：realm/probe 页本身内容少，不能用 innerHTML 长度判挂载
+        mainText: (() => { const m = a ? (a.querySelector('.max-w-\\[1800px\\]') || a) : null; return m ? (m.innerText || '').replace(/\\s+/g, ' ').trim() : ''; })() };
       if (tb !== 'nodes') return res;
       const tiles = [...document.querySelectorAll('.kui-ncard')];
       res.tileCount = tiles.length;
@@ -93,9 +95,11 @@ let failed = 0;
       return res;
     }, tab);
 
-    const bad = errs.length > 0 || r.h < 100 || r.len < 5000 || (tab === 'nodes' && r.tileCount !== 7);
+    // ★ 判定：Vue 已挂载(高度) + 主区有可见文本 + 无致命错误。原判innerHTML.length>5000
+    // 会把 realm(内容少) / probe(canvas 地图) 误判为挂载失败。
+    const bad = errs.length > 0 || r.h < 100 || r.mainText.length < 40 || (tab === 'nodes' && r.tileCount !== 7);
     if (bad) failed++;
-    console.log((bad ? 'FAIL' : 'PASS') + ' | tab=' + tab.padEnd(11) + ' | 挂载=' + (r.len > 5000 ? 'OK' : 'FAIL') + ' 高=' + String(r.h).padStart(4) + (errs.length ? ' | ' + errs[0] : ''));
+    console.log((bad ? 'FAIL' : 'PASS') + ' | tab=' + tab.padEnd(11) + ' | 主区文本=' + String(r.mainText.length).padStart(5) + '字 高=' + String(r.h).padStart(4) + (errs.length ? ' | ' + errs[0] : ''));
 
     if (tab === 'nodes' && r.tileCount) {
       console.log('  tile 数=' + r.tileCount + ' 高度=' + r.height + 'px 宽度=' + r.width + 'px | display=' + r.display + ' dir=' + r.dir + ' justify=' + r.just + ' padding=' + r.pad);

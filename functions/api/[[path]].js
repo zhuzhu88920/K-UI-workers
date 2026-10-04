@@ -157,15 +157,20 @@ function yamlString(value) {
 //  **不需要**为每个人生成独立 Reality 密钥，这是多对多能低成本落地的关键。
 //
 //  凭据字段按协议分为两类：
-//    uuid 型   —— VLESS / XTLS-Reality / H2-Reality / gRPC-Reality / VLESS-Argo
+//    uuid 型   —— VLESS / XTLS-Reality / H2-Reality / gRPC-Reality / VLESS-Argo / TUIC
 //                 → 凭据写进 users[].uuid
-//    password 型 —— Trojan / AnyTLS / Hysteria2 / TUIC / Naive / Socks5
-//                 → 凭据写进 users[].password（TUIC 另需 users[].uuid）
+//    password 型 —— Trojan / AnyTLS / Hysteria2
+//                 → 凭据写进 users[].password
 //
 //  多对多开放名单（实测通过）：VLESS 系 + Hysteria2 + TUIC + Trojan + AnyTLS
 //  不开放：Naive / Socks5（双字段且涉及转发语义，超出本次范围）
-const CREDENTIAL_UUID_PROTOCOLS = new Set(['VLESS', 'XTLS-Reality', 'Reality', 'H2-Reality', 'gRPC-Reality', 'VLESS-Argo']);
-const CREDENTIAL_PASSWORD_PROTOCOLS = new Set(['Hysteria2', 'TUIC', 'Trojan', 'AnyTLS']);
+//
+//  ⚠️ TUIC 必须归 uuid 型：sing-box 的 tuic inbound 每个 user 同时要 uuid 和 password，
+//  但 uuid 字段强制校验格式（incorrect UUID length）。若用 base64 密码当凭据，
+//  整份配置会被 sing-box 拒绝 → agent 回滚 last-good → 所有用户凭据全部失效。
+//  实测（VPS sing-box 1.13.14）：uuid=password=同一个合法 UUID 可正常 check 通过。
+const CREDENTIAL_UUID_PROTOCOLS = new Set(['VLESS', 'XTLS-Reality', 'Reality', 'H2-Reality', 'gRPC-Reality', 'VLESS-Argo', 'TUIC']);
+const CREDENTIAL_PASSWORD_PROTOCOLS = new Set(['Hysteria2', 'Trojan', 'AnyTLS']);
 const MULTI_CRED_PROTOCOLS = new Set([...CREDENTIAL_UUID_PROTOCOLS, ...CREDENTIAL_PASSWORD_PROTOCOLS]);
 
 // 是否支持多用户独立凭据（前端授权页据此只显示这几类节点）

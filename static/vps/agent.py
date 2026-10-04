@@ -960,17 +960,34 @@ def build_singbox_config(nodes, proxy_cfg=None, peers=None, mesh=None, socks5_ou
         #  是上次「改了数据库但没改下发」导致全员断联的结构性根因。
         #
         #  凭据类型按协议二分：
-        #    uuid 型   —— VLESS / XTLS-Reality / H2-Reality / gRPC-Reality
-        #    password 型 —— Hysteria2 / Trojan / AnyTLS（TUIC 两者都要）
+        #    uuid 型   —— VLESS / XTLS-Reality / H2-Reality / gRPC-Reality / TUIC
+        #    password 型 —— Hysteria2 / Trojan / AnyTLS
+        #
+        #  ⚠️ TUIC 的 users[] 同时要 uuid 和 password，但 uuid 字段被 sing-box 强制校验格式。
+        #  若凭据是 base64 密码，整份配置会被拒（incorrect UUID length），
+        #  agent 回滚 last-good → 所有用户凭据全部失效。实测 1.13.14：uuid=password=同一个
+        #  合法 UUID 可正常 check。因此 TUIC 归入 uuid 型，两字段共用同一凭据。
+        UUID_PROTO = {"VLESS", "XTLS-Reality", "Reality", "H2-Reality", "gRPC-Reality", "TUIC"}
+        UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
         grant_rows = node.get("grants") or []
         grant_users = []
         seen_cred = set()
+        dropped_bad = 0
         for g in grant_rows:
             cred = (g.get("credential") or "").strip()
             if not cred or cred in seen_cred:
                 continue
+            # 防御：uuid 型协议必须拿到合法 UUID，否则 sing-box 会拒掉整份配置。
+            # 这里就地剔除坏值而不是把错误抛给上层 —— 一个坏凭据只影响那一个用户，
+            # 绝不能再演变成全员断联。
+            if proto in UUID_PROTO and not UUID_RE.match(cred):
+                dropped_bad += 1
+                continue
             seen_cred.add(cred)
             grant_users.append(cred)
+        if dropped_bad:
+            print(f"[agent] node {node_id} ({proto}): dropped {dropped_bad} invalid credential(s) — "
+                  f"likely a base64 password stored for a uuid-type protocol", flush=True)
         if not grant_users:
             # 无授权记录（老库/ 未迁移 / 单归属模式）：回退到节点主凭据，行为与旧版一致
             grant_users = [node.get("uuid") or ""]
@@ -991,7 +1008,7 @@ def build_singbox_config(nodes, proxy_cfg=None, peers=None, mesh=None, socks5_ou
                 except: pass
         
         # users 一律由 grant_users 聚合而成：uuid 型 protocols 每人一个 uuid，
-        # password 型每人一个 password，TUIC 两者都要。没有授权记录时回退到主凭据。
+        # password 型每人一个 password（TUIC 已归 uuid 型，uuid=password=凭据）。没授权记录时回退主凭据。
         uuid_users = [{"uuid": c} for c in grant_users]
         if proto == "VLESS": singbox_config["inbounds"].append({"type": "vless", "tag": in_tag, "listen": "::", "listen_port": port, "users": uuid_users})
         elif proto in ["XTLS-Reality", "Reality"]: singbox_config["inbounds"].append({"type": "vless", "tag": in_tag, "listen": "::", "listen_port": port, "users": [{"uuid": c, "flow": "xtls-rprx-vision"} for c in grant_users], "tls": {"enabled": True, "server_name": sni, "reality": {"enabled": True, "handshake": {"server": sni, "server_port": 443}, "private_key": node["private_key"], "short_id": [node["short_id"]]}}})

@@ -1387,6 +1387,18 @@ font-family:var(--mono); font-size:9.5px; font-weight:600; color:var(--sub); }
                         <button @click="resetMySubLink" class="bg-rose-50 text-rose-600 border border-rose-100 px-6 py-3 rounded-2xl font-bold hover:bg-rose-100 transition-all shadow-sm">⚠️ 重置并吊销旧订阅</button>
                     </div>
                 </template>
+
+                <!-- 管理员账号安全：与上方用户卡片同款样式，只含改密，不含订阅重置（避免新增危险入口） -->
+                <template v-if="role === 'admin'">
+                    <div class="bg-white/60 backdrop-blur-xl p-8 rounded-[2.5rem] border border-white shadow-xl shadow-slate-200/40">
+                        <h3 class="text-xl font-black text-slate-800 mb-6 flex items-center gap-2">🔑 管理员账号安全</h3>
+                        <p class="text-sm text-slate-500 mb-4 font-medium">修改管理员登录密码。至少 12 位。修改成功后会立即清除当前所有登录会话，需要用新密码重新登录。</p>
+                        <div class="max-w-md">
+                            <label class="block text-xs font-bold text-slate-400 mb-2 pl-2">修改管理员登录密码</label>
+                            <div class="flex gap-3"><input v-model="adminNewPassword" type="password" placeholder="请输入新密码（至少 12 位）" class="w-full bg-white/50 border border-white p-3 rounded-2xl transition hover:bg-white focus:bg-white text-sm font-medium"><button @click="updateAdminPassword" class="bg-indigo-600 text-white px-6 py-3 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-md whitespace-nowrap">确认修改</button></div>
+                        </div>
+                    </div>
+                </template>
             </div>
             
         </div>
@@ -1472,7 +1484,7 @@ font-family:var(--mono); font-size:9.5px; font-weight:600; color:var(--sub); }
                 let realtimeSocket = null; let realtimeReconnectTimer = null; let realtimeFallbackTimer = null; let realtimeConnectTimer = null; let realtimePingTimer = null; let realtimeGeneration = 0; let realtimeDisconnectedAt = 0; let lastRealtimePing = 0; let realtimeRetryDelay = 5000;
                 let publicRealtimeSocket = null; let publicRealtimeReconnectTimer = null; let publicRealtimeFallbackTimer = null; let publicRealtimeConnectTimer = null; let publicRealtimeActivityTimer = null; let publicRealtimeDisconnectedAt = 0; let publicRealtimeRetryDelay = 10000;
                 const newVps = ref({ name: '', ip: '', os: 'debian' }); const newNodeParams = reactive({}); const newUser = reactive({ username: '' });
-                const mySubToken = ref(''); const siteTitle = ref(''); const siteTitleInput = ref(''); const userNewPassword = ref('');
+                const mySubToken = ref(''); const siteTitle = ref(''); const siteTitleInput = ref(''); const userNewPassword = ref(''); const adminNewPassword = ref('');
                 const batchStartPort = reactive({}); const batchUser = reactive({}); 
                 const thirdPartySubscriptions = ref([]); const newThirdParty = reactive({ name: '', url: '' }); const loadingThirdParty = ref(false);
                 
@@ -2091,6 +2103,20 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
 
                 const saveSiteTitle = async () => { if(!siteTitleInput.value) return alert('名称不能为空！'); await fetchApi('/api/settings', { method: 'POST', body: JSON.stringify({ site_title: siteTitleInput.value }) }); siteTitle.value = siteTitleInput.value; alert('✅ KUI 聚合面板名称保存成功！'); };
                 const updateUserPassword = async () => { if(!userNewPassword.value) return alert('请输入新密码'); await fetchApi('/api/user/password', { method: 'PUT', body: JSON.stringify({ password: userNewPassword.value }) }); alert('✅ 密码修改成功！请使用新密码重新登录。'); logout(); };
+                // 管理员改密：后端 isAdmin 分支会改 admin_credentials 并清空本人全部会话，
+                // 因此成功后必须走 logout()，不能沿用用户改密那套「提示后留在页面」的假设。
+                const updateAdminPassword = async () => {
+                    const pwd = String(adminNewPassword.value || '');
+                    if (!pwd) return alert('请输入新密码');
+                    if (pwd.length < 12) return alert('⚠️ 密码至少 12 位');
+                    if (!confirm('确定要修改管理员登录密码吗？\n\n修改后当前所有登录会话会立即失效，需用新密码重新登录。')) return;
+                    try {
+                        await fetchApi('/api/user/password', { method: 'PUT', body: JSON.stringify({ password: pwd }) });
+                    } catch (e) { return; }  // fetchApi 已弹错误提示并抛异常，这里吞掉避免重复弹窗
+                    adminNewPassword.value = '';
+                    alert('✅ 管理员密码修改成功！请用新密码重新登录。');
+                    logout();
+                };
                 const resetMySubLink = async () => { if(confirm('🚨 危险操作！重置后系统将为您签发全新的 UUID 订阅令牌，原链接将【立即作废】！确定要继续重置吗？')) { try { const res = await fetchApi('/api/user/sub_token', { method: 'PUT' }); const r = await res.json().catch(() => null); if (r && r.token) mySubToken.value = r.token; const link = generateSubLink('', ''); try { await navigator.clipboard.writeText(link); } catch(e) {} showToast('订阅令牌已刷新，新链接已复制到剪贴板'); refreshData(); } catch(e) {} } };
                 
                 // username/token 为可选覆盖：管理员给别人生成订阅链接时用，
@@ -2356,7 +2382,7 @@ body.theme11 #app, body.theme13 #app, body.theme14 #app, body.theme15 #app, body
                     login, logout, refreshData, addUser, toggleUser, deleteUser, userSubToken, copyUserSub, isUserBlocked, userBlockReason, userNodeIds, enabledNodes, grantableNodes, nodesByVps, isVpsFullyPicked, toggleVpsNodes, pickAllNodes, pickNoNodes, nodePickerFor, nodePickerDraft, toggleNodePicker, saveNodePicker, showToast, addVps, deleteVps, addNode, deleteNode, toggleNode, resetTraffic,
                     getNodesByIp, getVpsName, formatBytes, formatDate, getExpireText, getTrafficPercent, getPingColor, isOnline, generateCmd, generateSubLink, copyCommand,
                     sparkBars, sparkTitle,
-                    globalOnline, globalTraffic, globalSpeedIn, globalSpeedOut, deployOsMap, saveOsMap, siteTitle, siteTitleInput, saveSiteTitle, userNewPassword, updateUserPassword, resetMySubLink, batchStartPort, batchUser, deployAllProtocols,
+                    globalOnline, globalTraffic, globalSpeedIn, globalSpeedOut, deployOsMap, saveOsMap, siteTitle, siteTitleInput, saveSiteTitle, userNewPassword, updateUserPassword, adminNewPassword, updateAdminPassword, resetMySubLink, batchStartPort, batchUser, deployAllProtocols,
                     probeSys, publicProbeServers, filteredProbeServers, probeView, probeDetailId, probeDetail, setProbeView, openProbeDetail, probeGlobalOnline, probeGlobalOffline, probeGlobalSpeedIn, probeGlobalSpeedOut, probeGlobalNetRx, probeGlobalNetTx, filteredProbeGroups, probeCountryStats, currentFilter,
                     saveProbeSettings, saveSubscriptionProtection, adminProbeServers, probeEditModalOpen, editingProbeNode, openProbeEditModal, saveProbeEdit, deleteProbeNode, currentDomain,
                     thirdPartySubscriptions, newThirdParty, loadingThirdParty, loadThirdPartySubscriptions, addThirdPartySubscription, toggleThirdPartySubscription, deleteThirdPartySubscription,

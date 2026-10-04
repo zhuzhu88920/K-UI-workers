@@ -23,3 +23,9 @@ _render.txt
 _*.html
 _*.cjs
 _*.png
+
+# 页面快照（每版结构不同、体积大，仅本地留基线）
+_baseline/
+
+# 部署前手工备份
+static/*.bak*
